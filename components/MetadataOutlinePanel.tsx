@@ -1,3 +1,4 @@
+import { useState } from "react"
 import type { WeixinArticle } from "../types"
 
 type MetadataOutlinePanelProps = {
@@ -8,6 +9,8 @@ type MetadataOutlinePanelProps = {
 }
 
 function MetaSection({ article }: { article?: WeixinArticle }) {
+  const [showMore, setShowMore] = useState(false)
+
   if (!article) {
     return <div className="wxa-empty">暂无提取数据</div>
   }
@@ -30,6 +33,38 @@ function MetaSection({ article }: { article?: WeixinArticle }) {
         <span>发布时间</span>
         <strong>{article.publishTime || "-"}</strong>
       </div>
+
+      <button
+        className="wxa-meta-more-btn"
+        data-testid="meta-more-toggle"
+        onClick={() => setShowMore((prev) => !prev)}>
+        {showMore ? "收起链接信息" : "更多"}
+      </button>
+
+      {showMore && (
+        <>
+          <div className="wxa-meta-item">
+            <span>文章链接</span>
+          </div>
+          <div className="wxa-meta-url" data-testid="article-url-link">
+            {article.url}
+          </div>
+
+          <div className="wxa-meta-item">
+            <span>公众号头像链接</span>
+          </div>
+          <div className="wxa-meta-url" data-testid="account-avatar-url">
+            {article.accountAvatar || "-"}
+          </div>
+
+          <div className="wxa-meta-item">
+            <span>头图链接</span>
+          </div>
+          <div className="wxa-meta-url" data-testid="cover-image-url">
+            {article.coverImage || "-"}
+          </div>
+        </>
+      )}
     </div>
   )
 }

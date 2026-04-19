@@ -31,6 +31,28 @@ function ensureAnchor(el: Element, text: string, index: number): string {
   return anchor;
 }
 
+function isNumericSectionMarker(text: string): boolean {
+  return /^\d{1,3}$/.test(text.trim());
+}
+
+function hasDominantBoldText(el: Element, fullText: string): boolean {
+  const boldNodes = Array.from(el.querySelectorAll("strong, b"));
+  if (boldNodes.length === 0) {
+    return false;
+  }
+
+  const boldLength = boldNodes
+    .map((node) => normalizeText(node.textContent || "").length)
+    .reduce((sum, len) => sum + len, 0);
+
+  const normalizedLength = normalizeText(fullText).length;
+  if (normalizedLength === 0) {
+    return false;
+  }
+
+  return boldLength / normalizedLength >= 0.7;
+}
+
 function inferLevelFromElement(el: Element, text: string): OutlineLevel | null {
   const tag = el.tagName.toLowerCase();
   if (tag === "h1") return 1;
@@ -56,12 +78,54 @@ function inferLevelFromElement(el: Element, text: string): OutlineLevel | null {
     return 2;
   }
 
+  // WeChat articles often use bold paragraphs as pseudo headings.
+  if (hasDominantBoldText(el, text) && text.length <= 40) {
+    if (isNumericSectionMarker(text)) {
+      return 2;
+    }
+
+    if (text.length <= 20) {
+      return 2;
+    }
+
+    return 3;
+  }
+
   return null;
+}
+
+function mergeAdjacentSectionHeadings(outline: ArticleOutlineItem[]): ArticleOutlineItem[] {
+  const merged: ArticleOutlineItem[] = [];
+
+  for (let i = 0; i < outline.length; i += 1) {
+    const current = outline[i];
+    const next = outline[i + 1];
+
+    if (
+      current &&
+      next &&
+      isNumericSectionMarker(current.text) &&
+      !isNumericSectionMarker(next.text)
+    ) {
+      merged.push({
+        level: next.level,
+        text: `${current.text} ${next.text}`,
+        // Use the actual heading's anchor for better scroll positioning.
+        anchor: next.anchor
+      });
+      i += 1;
+      continue;
+    }
+
+    merged.push(current);
+  }
+
+  return merged;
 }
 
 export function buildArticleOutline(container: HTMLElement): ArticleOutlineItem[] {
   const candidates = container.querySelectorAll(
-    "h1, h2, h3, p, section, div, strong"
+    "h1, h2, h3, p, section, div"
   );
 
   const outline: ArticleOutlineItem[] = [];
@@ -73,7 +137,8 @@ export function buildArticleOutline(container: HTMLElement): ArticleOutlineItem[
     }
 
     const text = normalizeText(el.textContent || "");
-    if (!text || text.length < 3 || text.length > 120) {
+    const isShortMarker = isNumericSectionMarker(text);
+    if (!text || (!isShortMarker && text.length < 3) || text.length > 120) {
       return;
     }
 
@@ -98,5 +163,5 @@ export function buildArticleOutline(container: HTMLElement): ArticleOutlineItem[
     });
   });
 
-  return outline;
+  return mergeAdjacentSectionHeadings(outline);
 }

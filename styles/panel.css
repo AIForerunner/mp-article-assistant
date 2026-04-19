@@ -113,6 +113,39 @@
   text-align: right;
 }
 
+.wxa-meta-link {
+  color: #0b6f7d;
+  font-size: 12px;
+  text-decoration: none;
+}
+
+.wxa-meta-link:hover {
+  text-decoration: underline;
+}
+
+.wxa-meta-url {
+  margin: -2px 0 8px;
+  padding: 6px 8px;
+  border: 1px solid #dce5ef;
+  border-radius: 8px;
+  background: #f8fbff;
+  font-size: 12px;
+  color: #1c3955;
+  line-height: 1.4;
+  word-break: break-all;
+}
+
+.wxa-meta-more-btn {
+  margin: 4px 0 10px;
+  border: 1px solid #bfcde0;
+  border-radius: 8px;
+  background: #f3f8ff;
+  color: #1d4264;
+  font-size: 12px;
+  padding: 6px 8px;
+  cursor: pointer;
+}
+
 label {
   display: block;
   font-size: 12px;

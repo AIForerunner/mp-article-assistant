@@ -70,6 +70,8 @@ export async function extractWeixinArticle(url: string): Promise<WeixinArticle> 
     title: meta.title,
     author: meta.author,
     accountName: meta.accountName,
+    accountAvatar: meta.accountAvatar,
+    coverImage: meta.coverImage,
     publishTime: meta.publishTime,
     contentHtml: extracted.cleanContainer.innerHTML,
     contentText: extracted.contentText,

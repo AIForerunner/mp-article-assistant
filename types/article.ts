@@ -19,6 +19,8 @@ export type WeixinArticle = {
   title: string;
   author?: string;
   accountName?: string;
+  accountAvatar?: string;
+  coverImage?: string;
   publishTime?: string;
 
   contentHtml: string;
