@@ -74,8 +74,44 @@ pnpm package
 
 在页面内面板的“后端配置”区域设置：
 
-- `API Base URL`，例如 `https://api.example.com`
-- `API Token`（可选）
+- `Request URL`，例如 `https://api.coze.cn/v1/workflow/stream_run`
+- `API Token`（可选，不含 `Bearer ` 前缀）
+- `Request Method`（默认 `POST`）
+- `Custom Headers JSON`（可选）
+- `Request Body Template JSON`（可选，支持占位符）
+
+首次使用会自动填入一份 Coze Workflow 默认示例（可直接改 workflow_id / app_id）。
+
+当配置 `Request Body Template JSON` 时，可使用占位符：
+
+- `{{url}}` 文章链接
+- `{{title}}` 标题
+- `{{content}}` 文章 Markdown 内容
+- `{{account}}` 公众号名称
+- `{{follow_avatar}}` 公众号头像
+- `{{create_time}}` 文章发布时间
+- `{{author}}` 作者
+- `{{content_text}}` 正文纯文本
+- `{{content_html}}` 正文 HTML
+- `{{biz}}` / `{{mid}}` / `{{idx}}` / `{{sn}}` 微信参数
+- `{{article}}` 完整提取对象
+
+Coze Workflow 示例（对应 curl）：
+
+```json
+{
+	"workflow_id": "7630469077471281204",
+	"app_id": "7630113285274877961",
+	"parameters": {
+		"url": "{{url}}",
+		"title": "{{title}}",
+		"content": "{{content}}",
+		"account": "{{account}}",
+		"follow_avatar": "{{follow_avatar}}",
+		"create_time": "{{create_time}}"
+	}
+}
+```
 
 配置通过 `chrome.storage.local` 持久化保存。
 

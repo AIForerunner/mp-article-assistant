@@ -119,11 +119,11 @@ export function AssistantPanel(props: AssistantPanelProps) {
           <section className="wxa-section">
             <h3>后端配置</h3>
             <label>
-              API Base URL
+              Request URL
               <input
                 data-testid="backend-url-input"
                 value={backendConfig.apiBaseUrl}
-                placeholder="https://your.api.host"
+                placeholder="https://api.coze.cn/v1/workflow/stream_run"
                 onChange={(event) =>
                   onBackendConfigChange({
                     ...backendConfig,
@@ -137,11 +137,70 @@ export function AssistantPanel(props: AssistantPanelProps) {
               <input
                 data-testid="backend-token-input"
                 value={backendConfig.apiToken || ""}
-                placeholder="可选"
+                placeholder="Bearer token（不含 Bearer 前缀）"
                 onChange={(event) =>
                   onBackendConfigChange({
                     ...backendConfig,
                     apiToken: event.currentTarget.value
+                  })
+                }
+              />
+            </label>
+            <label>
+              Request Method
+              <select
+                data-testid="backend-method-select"
+                value={backendConfig.requestMethod || "POST"}
+                onChange={(event) =>
+                  onBackendConfigChange({
+                    ...backendConfig,
+                    requestMethod: event.currentTarget.value as "POST" | "PUT" | "PATCH"
+                  })
+                }>
+                <option value="POST">POST</option>
+                <option value="PUT">PUT</option>
+                <option value="PATCH">PATCH</option>
+              </select>
+            </label>
+            <label>
+              Custom Headers JSON
+              <textarea
+                data-testid="backend-headers-input"
+                value={backendConfig.customHeadersJson || ""}
+                placeholder={'{"Authorization":"Bearer xxx","Content-Type":"application/json"}'}
+                onChange={(event) =>
+                  onBackendConfigChange({
+                    ...backendConfig,
+                    customHeadersJson: event.currentTarget.value
+                  })
+                }
+              />
+            </label>
+            <label>
+              Request Body Template JSON
+              <textarea
+                data-testid="backend-body-template-input"
+                value={backendConfig.requestBodyTemplate || ""}
+                placeholder={JSON.stringify(
+                  {
+                    workflow_id: "",
+                    app_id: "",
+                    parameters: {
+                      url: "{{url}}",
+                      title: "{{title}}",
+                      content: "{{content}}",
+                      account: "{{account}}",
+                      follow_avatar: "{{follow_avatar}}",
+                      create_time: "{{create_time}}"
+                    }
+                  },
+                  null,
+                  2
+                )}
+                onChange={(event) =>
+                  onBackendConfigChange({
+                    ...backendConfig,
+                    requestBodyTemplate: event.currentTarget.value
                   })
                 }
               />

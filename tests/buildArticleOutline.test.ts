@@ -7,6 +7,7 @@ describe("buildArticleOutline", () => {
       <div id="root">
         <h1>主标题</h1>
         <h2>第二节</h2>
+        <h3>第三节</h3>
         <p>普通段落内容</p>
       </div>
     `;
@@ -14,40 +15,49 @@ describe("buildArticleOutline", () => {
     const root = document.getElementById("root") as HTMLElement;
     const outline = buildArticleOutline(root);
 
-    expect(outline.length).toBe(2);
+    expect(outline.length).toBe(3);
     expect(outline[0].level).toBe(1);
     expect(outline[1].level).toBe(2);
+    expect(outline[2].level).toBe(3);
     expect(outline[0].anchor).toMatch(/^wxa-/);
   });
 
-  it("infers heading from style and text pattern", () => {
+  it("ignores non-heading tags and very short text", () => {
     document.body.innerHTML = `
       <div id="root">
-        <p style="font-size:20px;font-weight:700">一、背景介绍</p>
+        <h1>真正的标题</h1>
+        <p><strong>这是粗体但不是h标签</strong></p>
+        <p>普通段落不会被提取</p>
+        <h2>第二个标题</h2>
       </div>
     `;
 
     const root = document.getElementById("root") as HTMLElement;
     const outline = buildArticleOutline(root);
 
-    expect(outline.length).toBe(1);
-    expect(outline[0].level).toBe(1);
+    expect(outline.length).toBe(2);
+    expect(outline[0].text).toBe("真正的标题");
+    expect(outline[1].text).toBe("第二个标题");
   });
 
-  it("extracts outline from bold-only pseudo headings", () => {
+  it("handles numeric section markers in headings", () => {
     document.body.innerHTML = `
       <div id="root">
-        <p><strong>01</strong></p>
-        <p><strong>汽车“故事”不好讲了</strong></p>
-        <p>这是正文段落，不是标题。</p>
+        <h2>01</h2>
+        <h2>汽车故事不好讲了</h2>
+        <h2>02</h2>
+        <h2>新能源的新路径</h2>
       </div>
     `;
 
     const root = document.getElementById("root") as HTMLElement;
     const outline = buildArticleOutline(root);
 
-    expect(outline.length).toBe(1);
+    // Should merge numeric markers with following headings
+    expect(outline.length).toBe(2);
     expect(outline[0].text).toContain("01");
-    expect(outline[0].text).toContain("不好讲了");
+    expect(outline[0].text).toContain("汽车故事不好讲了");
+    expect(outline[1].text).toContain("02");
+    expect(outline[1].text).toContain("新能源的新路径");
   });
 });

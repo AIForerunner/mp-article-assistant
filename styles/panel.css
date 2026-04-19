@@ -164,6 +164,24 @@ input {
   background: #ffffff;
 }
 
+select,
+textarea {
+  margin-top: 4px;
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid #c3cfdf;
+  border-radius: 8px;
+  font-size: 12px;
+  padding: 7px;
+  background: #ffffff;
+  font-family: inherit;
+}
+
+textarea {
+  min-height: 88px;
+  resize: vertical;
+}
+
 input[type='checkbox'] {
   width: auto;
   margin-right: 6px;
