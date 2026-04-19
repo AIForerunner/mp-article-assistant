@@ -1,0 +1,39 @@
+{
+  "name": "mp-article-assistant",
+  "displayName": "MP Article Assistant",
+  "version": "0.0.1",
+  "description": "Weixin MP article in-page assistant built with Plasmo",
+  "author": "",
+  "scripts": {
+    "dev": "plasmo dev",
+    "build": "plasmo build",
+    "package": "plasmo package",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "plasmo": "^0.90.5",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "turndown": "^7.2.0"
+  },
+  "devDependencies": {
+    "@types/chrome": "^0.0.294",
+    "@types/node": "^22.10.2",
+    "@types/react": "^18.3.14",
+    "@types/react-dom": "^18.3.5",
+    "@types/turndown": "^5.0.5",
+    "jsdom": "^25.0.1",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  },
+  "manifest": {
+    "permissions": [
+      "storage",
+      "clipboardWrite"
+    ],
+    "host_permissions": [
+      "https://mp.weixin.qq.com/*"
+    ]
+  }
+}

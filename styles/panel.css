@@ -1,0 +1,165 @@
+:host {
+  all: initial;
+}
+
+.wxa-panel {
+  position: fixed;
+  top: 56px;
+  width: 360px;
+  max-height: calc(100vh - 72px);
+  border-radius: 12px;
+  border: 1px solid #cfd7e2;
+  background: #f7fafc;
+  color: #132235;
+  box-shadow: 0 10px 30px rgba(14, 23, 38, 0.16);
+  z-index: 2147483647;
+  display: flex;
+  flex-direction: column;
+  font-family: 'SF Pro Text', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+}
+
+.wxa-panel:not(.wxa-panel-left) {
+  right: 20px;
+}
+
+.wxa-panel.wxa-panel-left {
+  left: 20px;
+}
+
+.wxa-panel.is-collapsed {
+  width: 88px;
+}
+
+.wxa-collapse {
+  border: none;
+  background: #0b6f7d;
+  color: #ffffff;
+  height: 36px;
+  border-radius: 10px 10px 0 0;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.wxa-body {
+  overflow: auto;
+  padding: 10px;
+}
+
+.wxa-section {
+  background: #ffffff;
+  border: 1px solid #dce5ef;
+  border-radius: 10px;
+  padding: 10px;
+  margin-bottom: 10px;
+}
+
+.wxa-section h3 {
+  margin: 0 0 8px;
+  font-size: 13px;
+  color: #0a4d62;
+}
+
+.wxa-status {
+  font-size: 12px;
+  margin-bottom: 6px;
+}
+
+.wxa-status.is-error {
+  color: #9f2734;
+}
+
+.wxa-status.is-success {
+  color: #1f7a38;
+}
+
+.wxa-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.wxa-actions button,
+.wxa-outline-item {
+  border: 1px solid #c3cfdf;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #163252;
+  cursor: pointer;
+  padding: 7px 8px;
+  font-size: 12px;
+  text-align: left;
+}
+
+.wxa-actions button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.wxa-meta-item {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12px;
+  margin-bottom: 6px;
+}
+
+.wxa-meta-item span {
+  color: #5a6f86;
+}
+
+.wxa-meta-item strong {
+  color: #132235;
+  font-weight: 600;
+  text-align: right;
+}
+
+label {
+  display: block;
+  font-size: 12px;
+  margin-bottom: 8px;
+  color: #48627f;
+}
+
+input {
+  margin-top: 4px;
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid #c3cfdf;
+  border-radius: 8px;
+  font-size: 12px;
+  padding: 7px;
+  background: #ffffff;
+}
+
+input[type='checkbox'] {
+  width: auto;
+  margin-right: 6px;
+  vertical-align: middle;
+}
+
+.wxa-outline {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.wxa-outline-item.level-2 {
+  padding-left: 14px;
+}
+
+.wxa-outline-item.level-3 {
+  padding-left: 20px;
+}
+
+.wxa-empty {
+  color: #6a7d91;
+  font-size: 12px;
+}
+
+@media (max-width: 900px) {
+  .wxa-panel {
+    right: 8px;
+    width: min(88vw, 360px);
+    top: 50px;
+  }
+}

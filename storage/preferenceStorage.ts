@@ -1,0 +1,15 @@
+import type { UserPreference } from "../types";
+import { getStorageValue, setStorageValue } from "./chromeStorage";
+import { STORAGE_KEYS } from "./keys";
+
+const DEFAULT_PREFERENCE: UserPreference = {
+  autoExtractOnStable: true
+};
+
+export async function getUserPreference(): Promise<UserPreference> {
+  return getStorageValue<UserPreference>(STORAGE_KEYS.preference, DEFAULT_PREFERENCE);
+}
+
+export async function setUserPreference(preference: UserPreference): Promise<void> {
+  await setStorageValue(STORAGE_KEYS.preference, preference);
+}
