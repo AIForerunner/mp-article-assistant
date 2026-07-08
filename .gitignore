@@ -1,5 +1,6 @@
 node_modules
 build
 .plasmo
+.pnpm-store
 .DS_Store
 coverage

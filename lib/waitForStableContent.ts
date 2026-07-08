@@ -15,7 +15,7 @@ function findContentNode(): HTMLElement | null {
 export async function waitForStableContent(options: WaitOptions = {}): Promise<HTMLElement> {
   const timeoutMs = options.timeoutMs ?? 12000;
   const quietWindowMs = options.quietWindowMs ?? 800;
-  const minTextLength = options.minTextLength ?? 200;
+  const minTextLength = options.minTextLength ?? 20;
 
   const start = Date.now();
 

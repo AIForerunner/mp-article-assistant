@@ -1,8 +1,8 @@
 {
   "name": "mp-article-assistant",
   "displayName": "MP Article Assistant",
-  "version": "0.0.1",
-  "description": "Weixin MP article in-page assistant built with Plasmo",
+  "version": "0.3.0",
+  "description": "Extract WeChat Official Account articles into local Markdown and JSON",
   "author": "",
   "scripts": {
     "dev": "plasmo dev",

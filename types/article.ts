@@ -6,6 +6,30 @@ export type ArticleOutlineItem = {
   anchor: string;
 };
 
+export type ArticleStats = {
+  textLength: number;
+  wordCount: number;
+  imageCount: number;
+  linkCount: number;
+  codeBlockCount: number;
+  outlineCount: number;
+};
+
+export type ArticleLink = {
+  text: string;
+  url: string;
+};
+
+export type ArticleCodeBlock = {
+  code: string;
+  language?: string;
+};
+
+export type ArticleExtractionInfo = {
+  warnings: string[];
+  confidence: number;
+};
+
 export type WeixinArticle = {
   source: "weixin_mp";
   url: string;
@@ -28,6 +52,10 @@ export type WeixinArticle = {
 
   outline: ArticleOutlineItem[];
   images: string[];
+  stats?: ArticleStats;
+  links?: ArticleLink[];
+  codeBlocks?: ArticleCodeBlock[];
+  extraction?: ArticleExtractionInfo;
 
   markdown?: string;
 

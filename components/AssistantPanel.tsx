@@ -1,4 +1,7 @@
+import { useMemo, useState } from "react"
 import type { BackendConfig, PageStatus, WeixinArticle } from "../types"
+
+type PreviewTab = "markdown" | "outline" | "metadata"
 
 type AssistantPanelProps = {
   pageStatus: PageStatus
@@ -11,26 +14,126 @@ type AssistantPanelProps = {
   onExtract: () => void
   onReExtract: () => void
   onSend: () => void
+  onCopyAgentContext: () => void
   onCopyMarkdown: () => void
+  onDownloadMarkdown: () => void
+  onDownloadJson: () => void
+  onApplyBackendPreset: () => void
   onBackendConfigChange: (next: BackendConfig) => void
   onAutoExtractChange: (next: boolean) => void
+  onOutlineClick: (anchor: string) => void
 }
 
-function renderExtractStatus(status: PageStatus): string {
-  if (status.extractStatus === "extracting") return "提取中"
-  if (status.extractStatus === "success") return "已提取"
-  if (status.extractStatus === "failed") return "提取失败"
-  return "待提取"
+function renderPageStatus(status: PageStatus): string {
+  if (!status.isWeixinArticlePage) return "Unsupported page"
+  if (status.extractStatus === "extracting") return "Extracting"
+  if (status.extractStatus === "success") return "Extracted"
+  if (status.extractStatus === "failed") return "Needs attention"
+  return "Ready"
 }
 
-function renderSendStatus(status: PageStatus): string {
-  if (status.sendStatus === "sending") return "发送中"
-  if (status.sendStatus === "success") return "已发送"
-  if (status.sendStatus === "failed") return "发送失败"
-  return "未发送"
+function statusTone(status: PageStatus): string {
+  if (!status.isWeixinArticlePage || status.extractStatus === "failed") return "is-error"
+  if (status.extractStatus === "success") return "is-success"
+  if (status.extractStatus === "extracting") return "is-working"
+  return "is-idle"
 }
 
+function sendStatusText(status: PageStatus): string {
+  if (status.sendStatus === "sending") return "Sending"
+  if (status.sendStatus === "success") return "Sent"
+  if (status.sendStatus === "failed") return "Send failed"
+  return "Not sent"
+}
 
+function formatStat(value: number | undefined): string {
+  return typeof value === "number" ? String(value) : "-"
+}
+
+function buildMetadataPreview(article: WeixinArticle) {
+  return {
+    source: article.source,
+    url: article.url,
+    urlType: article.urlType,
+    title: article.title,
+    author: article.author,
+    accountName: article.accountName,
+    publishTime: article.publishTime,
+    accountAvatar: article.accountAvatar,
+    coverImage: article.coverImage,
+    biz: article.biz,
+    mid: article.mid,
+    idx: article.idx,
+    sn: article.sn,
+    stats: article.stats,
+    links: article.links,
+    codeBlocks: article.codeBlocks,
+    extraction: article.extraction,
+    extractedAt: article.extractedAt,
+    extractorVersion: article.extractorVersion
+  }
+}
+
+function EmptyState({ onExtract }: { onExtract: () => void }) {
+  return (
+    <div className="wxa-empty-state">
+      <div>No article extracted yet.</div>
+      <button className="wxa-secondary-btn" onClick={onExtract} data-testid="extract-article-btn">
+        Extract article
+      </button>
+    </div>
+  )
+}
+
+function PreviewPane({
+  article,
+  activeTab,
+  onExtract,
+  onOutlineClick
+}: {
+  article?: WeixinArticle
+  activeTab: PreviewTab
+  onExtract: () => void
+  onOutlineClick: (anchor: string) => void
+}) {
+  if (!article) {
+    return <EmptyState onExtract={onExtract} />
+  }
+
+  if (activeTab === "outline") {
+    return (
+      <div className="wxa-outline" data-testid="outline-list">
+        {article.outline?.length ? (
+          article.outline.map((item) => (
+            <button
+              key={item.anchor}
+              className={`wxa-outline-item level-${item.level}`}
+              data-testid={`outline-item-${item.anchor}`}
+              onClick={() => onOutlineClick(item.anchor)}>
+              {item.text}
+            </button>
+          ))
+        ) : (
+          <div className="wxa-empty">No semantic headings found.</div>
+        )}
+      </div>
+    )
+  }
+
+  if (activeTab === "metadata") {
+    return (
+      <pre className="wxa-preview-code" data-testid="metadata-preview">
+        {JSON.stringify(buildMetadataPreview(article), null, 2)}
+      </pre>
+    )
+  }
+
+  return (
+    <pre className="wxa-preview-code" data-testid="markdown-preview">
+      {article.markdown || article.contentText || "No Markdown output."}
+    </pre>
+  )
+}
 
 export function AssistantPanel(props: AssistantPanelProps) {
   const {
@@ -43,180 +146,269 @@ export function AssistantPanel(props: AssistantPanelProps) {
     onExtract,
     onReExtract,
     onSend,
+    onCopyAgentContext,
     onCopyMarkdown,
+    onDownloadMarkdown,
+    onDownloadJson,
+    onApplyBackendPreset,
     onBackendConfigChange,
     autoExtractOnStable,
-    onAutoExtractChange
+    onAutoExtractChange,
+    onOutlineClick
   } = props
 
+  const [activeTab, setActiveTab] = useState<PreviewTab>("markdown")
+  const [advancedOpen, setAdvancedOpen] = useState(false)
   const article = pageStatus.article
+  const hasEndpoint = Boolean(backendConfig.apiBaseUrl?.trim())
+  const canUseArticle = Boolean(article)
+  const isCopying = copyStatus === "copying"
+  const statusLabel = renderPageStatus(pageStatus)
+  const statusClass = statusTone(pageStatus)
 
-  const copyStatusText =
-    copyStatus === "copying"
-      ? "复制中"
-      : copyStatus === "success"
-        ? "已复制"
-        : copyStatus === "failed"
-          ? "复制失败"
-          : "待复制"
+  const stats = useMemo(
+    () => ({
+      text: article?.stats?.textLength ?? article?.contentText?.length,
+      images: article?.stats?.imageCount ?? article?.images?.length,
+      links: article?.stats?.linkCount ?? article?.links?.length,
+      code: article?.stats?.codeBlockCount ?? article?.codeBlocks?.length
+    }),
+    [article]
+  )
+
+  if (collapsed) {
+    return (
+      <div className="wxa-root is-collapsed" data-testid="assistant-panel-root">
+        <button className="wxa-launcher" onClick={onToggleCollapsed} data-testid="panel-toggle-btn">
+          <span className={`wxa-status-dot ${statusClass}`} />
+          <span>MP Article</span>
+        </button>
+      </div>
+    )
+  }
 
   return (
-    <div className={`wxa-panel ${collapsed ? "is-collapsed" : ""}`} data-testid="assistant-panel-root">
-      <button className="wxa-collapse" onClick={onToggleCollapsed} data-testid="panel-toggle-btn">
-        {collapsed ? "展开" : "收起"}
-      </button>
+    <div className="wxa-root" data-testid="assistant-panel-root">
+      <aside className="wxa-drawer" aria-label="MP Article Assistant drawer">
+        <header className="wxa-header">
+          <div>
+            <h2>MP Article Assistant</h2>
+            <div className="wxa-header-status">
+              <span className={`wxa-status-dot ${statusClass}`} />
+              <span data-testid="page-detect-status">{statusLabel}</span>
+              <span className="wxa-send-state">{sendStatusText(pageStatus)}</span>
+            </div>
+          </div>
+          <div className="wxa-header-actions">
+            <button className="wxa-icon-btn" onClick={article ? onReExtract : onExtract} data-testid="reextract-article-btn">
+              Refresh
+            </button>
+            <button className="wxa-icon-btn" onClick={onToggleCollapsed} data-testid="panel-toggle-btn">
+              Collapse
+            </button>
+          </div>
+        </header>
 
-      {!collapsed && (
-        <div className="wxa-body">
-          <section className="wxa-section">
-            <h3>页面状态</h3>
-            <div className="wxa-status" data-testid="page-detect-status">
-              页面识别: {pageStatus.isWeixinArticlePage ? "公众号文章" : "非目标页面"}
+        <div className="wxa-scroll">
+          <section className="wxa-section wxa-summary-section">
+            <div className="wxa-summary-title">{article?.title || "No article extracted"}</div>
+            <div className="wxa-summary-meta">
+              <span>{article?.accountName || "Account unknown"}</span>
+              <span>{article?.publishTime || "Publish time unknown"}</span>
             </div>
-            <div className="wxa-status" data-testid="extract-status">
-              提取状态: {renderExtractStatus(pageStatus)}
+            <div className="wxa-stat-grid">
+              <div>
+                <span>Text</span>
+                <strong>{formatStat(stats.text)}</strong>
+              </div>
+              <div>
+                <span>Images</span>
+                <strong>{formatStat(stats.images)}</strong>
+              </div>
+              <div>
+                <span>Links</span>
+                <strong>{formatStat(stats.links)}</strong>
+              </div>
+              <div>
+                <span>Code</span>
+                <strong>{formatStat(stats.code)}</strong>
+              </div>
             </div>
-            <div className="wxa-status" data-testid="send-status">
-              发送状态: {renderSendStatus(pageStatus)}
-            </div>
-            <div
-              className={`wxa-status ${copyStatus === "success" ? "is-success" : copyStatus === "failed" ? "is-error" : ""}`}
-              data-testid="copy-status">
-              复制状态: {copyStatusText}{copyMessage ? `（${copyMessage}）` : ""}
-            </div>
-            <div className="wxa-status" data-testid="extract-time-status">
-              提取时间: {pageStatus.lastExtractedAt || "-"}
-            </div>
-            <div className="wxa-status is-error" data-testid="error-status">
-              错误: {pageStatus.lastError || "-"}
-            </div>
+            <p className="wxa-privacy-copy">
+              By default, content stays in your browser. It is only sent when you configure an endpoint and click Send.
+            </p>
           </section>
 
           <section className="wxa-section">
-            <h3>操作</h3>
+            <div className="wxa-section-heading">
+              <h3>Actions</h3>
+              <span data-testid="copy-status">
+                {isCopying ? "Copying" : copyStatus === "success" ? "Copied" : copyStatus === "failed" ? "Copy failed" : copyMessage || ""}
+              </span>
+            </div>
             <div className="wxa-actions">
-              <button onClick={onExtract} data-testid="extract-article-btn">
-                提取文章
+              <button onClick={onCopyAgentContext} disabled={!canUseArticle || isCopying} data-testid="copy-agent-context-btn">
+                Copy for AI
               </button>
-              <button onClick={onReExtract} data-testid="reextract-article-btn">
-                重新提取
+              <button onClick={onCopyMarkdown} disabled={!canUseArticle || isCopying} data-testid="copy-markdown-btn">
+                Copy Markdown
+              </button>
+              <button onClick={onDownloadMarkdown} disabled={!canUseArticle} data-testid="download-markdown-btn">
+                Download Markdown
+              </button>
+              <button onClick={onDownloadJson} disabled={!canUseArticle} data-testid="download-json-btn">
+                Download JSON
               </button>
               <button
+                className="wxa-send-btn"
                 onClick={onSend}
-                data-testid="send-backend-btn"
-                disabled={!article || pageStatus.sendStatus === "sending"}>
-                发送后端
+                disabled={!canUseArticle || !hasEndpoint || pageStatus.sendStatus === "sending"}
+                data-testid="send-backend-btn">
+                Send to workflow
               </button>
-              <button
-                onClick={onCopyMarkdown}
-                data-testid="copy-markdown-btn"
-                disabled={!article?.markdown || copyStatus === "copying"}>
-                {copyStatus === "copying" ? "复制中..." : copyStatus === "success" ? "已复制" : "复制 Markdown"}
-              </button>
+            </div>
+            {pageStatus.lastError && (
+              <div className="wxa-inline-error" data-testid="error-status">
+                {pageStatus.lastError}
+              </div>
+            )}
+            <div className="wxa-small-status" data-testid="extract-status">
+              Extraction: {statusLabel}
+              {pageStatus.lastExtractedAt ? ` at ${pageStatus.lastExtractedAt}` : ""}
+            </div>
+            <div className="wxa-small-status" data-testid="send-status">
+              Workflow: {sendStatusText(pageStatus)}
             </div>
           </section>
 
           <section className="wxa-section">
-            <h3>后端配置</h3>
-            <label>
-              Request URL
-              <input
-                data-testid="backend-url-input"
-                value={backendConfig.apiBaseUrl}
-                placeholder="https://api.coze.cn/v1/workflow/stream_run"
-                onChange={(event) =>
-                  onBackendConfigChange({
-                    ...backendConfig,
-                    apiBaseUrl: event.currentTarget.value
-                  })
-                }
+            <div className="wxa-tabs" role="tablist" aria-label="Article preview">
+              {(["markdown", "outline", "metadata"] as const).map((tab) => (
+                <button
+                  key={tab}
+                  className={activeTab === tab ? "is-active" : ""}
+                  onClick={() => setActiveTab(tab)}
+                  role="tab"
+                  aria-selected={activeTab === tab}
+                  data-testid={`preview-tab-${tab}`}>
+                  {tab === "markdown" ? "Markdown" : tab === "outline" ? "Outline" : "Metadata"}
+                </button>
+              ))}
+            </div>
+            <div className="wxa-preview">
+              <PreviewPane
+                article={article}
+                activeTab={activeTab}
+                onExtract={onExtract}
+                onOutlineClick={onOutlineClick}
               />
-            </label>
-            <label>
-              API Token
-              <input
-                data-testid="backend-token-input"
-                value={backendConfig.apiToken || ""}
-                placeholder="Bearer token（不含 Bearer 前缀）"
-                onChange={(event) =>
-                  onBackendConfigChange({
-                    ...backendConfig,
-                    apiToken: event.currentTarget.value
-                  })
-                }
-              />
-            </label>
-            <label>
-              Request Method
-              <select
-                data-testid="backend-method-select"
-                value={backendConfig.requestMethod || "POST"}
-                onChange={(event) =>
-                  onBackendConfigChange({
-                    ...backendConfig,
-                    requestMethod: event.currentTarget.value as "POST" | "PUT" | "PATCH"
-                  })
-                }>
-                <option value="POST">POST</option>
-                <option value="PUT">PUT</option>
-                <option value="PATCH">PATCH</option>
-              </select>
-            </label>
-            <label>
-              Custom Headers JSON
-              <textarea
-                data-testid="backend-headers-input"
-                value={backendConfig.customHeadersJson || ""}
-                placeholder={'{"Authorization":"Bearer xxx","Content-Type":"application/json"}'}
-                onChange={(event) =>
-                  onBackendConfigChange({
-                    ...backendConfig,
-                    customHeadersJson: event.currentTarget.value
-                  })
-                }
-              />
-            </label>
-            <label>
-              Request Body Template JSON
-              <textarea
-                data-testid="backend-body-template-input"
-                value={backendConfig.requestBodyTemplate || ""}
-                placeholder={JSON.stringify(
-                  {
-                    workflow_id: "",
-                    app_id: "",
-                    parameters: {
-                      url: "{{url}}",
-                      title: "{{title}}",
-                      content: "{{content}}",
-                      account: "{{account}}",
-                      follow_avatar: "{{follow_avatar}}",
-                      create_time: "{{create_time}}"
+            </div>
+          </section>
+
+          <section className="wxa-section">
+            <button
+              className="wxa-advanced-toggle"
+              onClick={() => setAdvancedOpen((prev) => !prev)}
+              aria-expanded={advancedOpen}
+              data-testid="advanced-settings-toggle">
+              <span>Advanced settings</span>
+              <span>{advancedOpen ? "Hide" : "Show"}</span>
+            </button>
+
+            {advancedOpen && (
+              <div className="wxa-advanced">
+                <div className="wxa-config-toolbar">
+                  <button className="wxa-secondary-btn" onClick={onApplyBackendPreset} data-testid="coze-preset-btn">
+                    Use Coze preset
+                  </button>
+                </div>
+                <label>
+                  Endpoint URL
+                  <input
+                    data-testid="backend-url-input"
+                    value={backendConfig.apiBaseUrl}
+                    placeholder="https://example.com/workflow"
+                    onChange={(event) =>
+                      onBackendConfigChange({
+                        ...backendConfig,
+                        apiBaseUrl: event.currentTarget.value
+                      })
                     }
-                  },
-                  null,
-                  2
-                )}
-                onChange={(event) =>
-                  onBackendConfigChange({
-                    ...backendConfig,
-                    requestBodyTemplate: event.currentTarget.value
-                  })
-                }
-              />
-            </label>
-            <label>
-              <input
-                type="checkbox"
-                data-testid="auto-extract-checkbox"
-                checked={autoExtractOnStable}
-                onChange={(event) => onAutoExtractChange(event.currentTarget.checked)}
-              />
-              正文稳定后自动提取
-            </label>
+                  />
+                </label>
+                <label>
+                  API Token
+                  <input
+                    type="password"
+                    data-testid="backend-token-input"
+                    value={backendConfig.apiToken || ""}
+                    placeholder="Optional bearer token"
+                    onChange={(event) =>
+                      onBackendConfigChange({
+                        ...backendConfig,
+                        apiToken: event.currentTarget.value
+                      })
+                    }
+                  />
+                </label>
+                <label>
+                  Method
+                  <select
+                    data-testid="backend-method-select"
+                    value={backendConfig.requestMethod || "POST"}
+                    onChange={(event) =>
+                      onBackendConfigChange({
+                        ...backendConfig,
+                        requestMethod: event.currentTarget.value as "POST" | "PUT" | "PATCH"
+                      })
+                    }>
+                    <option value="POST">POST</option>
+                    <option value="PUT">PUT</option>
+                    <option value="PATCH">PATCH</option>
+                  </select>
+                </label>
+                <label>
+                  Headers JSON
+                  <textarea
+                    data-testid="backend-headers-input"
+                    value={backendConfig.customHeadersJson || ""}
+                    placeholder={'{"Content-Type":"application/json"}'}
+                    onChange={(event) =>
+                      onBackendConfigChange({
+                        ...backendConfig,
+                        customHeadersJson: event.currentTarget.value
+                      })
+                    }
+                  />
+                </label>
+                <label>
+                  Body Template JSON
+                  <textarea
+                    data-testid="backend-body-template-input"
+                    value={backendConfig.requestBodyTemplate || ""}
+                    placeholder={'{"title":"{{title}}","content":"{{content}}","url":"{{url}}"}'}
+                    onChange={(event) =>
+                      onBackendConfigChange({
+                        ...backendConfig,
+                        requestBodyTemplate: event.currentTarget.value
+                      })
+                    }
+                  />
+                </label>
+                <label className="wxa-checkbox-row">
+                  <input
+                    type="checkbox"
+                    data-testid="auto-extract-checkbox"
+                    checked={autoExtractOnStable}
+                    onChange={(event) => onAutoExtractChange(event.currentTarget.checked)}
+                  />
+                  Auto extract when article settles
+                </label>
+              </div>
+            )}
           </section>
         </div>
-      )}
+      </aside>
     </div>
   )
 }

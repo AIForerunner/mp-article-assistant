@@ -1,10 +1,18 @@
-import cssText from "data-text:../styles/panel.css"
+import cssAssetUrl from "url:../styles/panel.css"
 import type { PlasmoCSConfig } from "plasmo"
 import React, { useEffect, useMemo, useRef, useState } from "react"
 import { createRoot } from "react-dom/client"
 import { AssistantPanel } from "../components/AssistantPanel"
-import { MetadataOutlinePanel } from "../components/MetadataOutlinePanel"
-import { detectWeixinArticlePage, extractWeixinArticle, scrollToAnchor } from "../lib"
+import {
+  buildMarkdownDocument,
+  copyAgentContext,
+  COZE_WORKFLOW_PRESET,
+  detectWeixinArticlePage,
+  downloadJson,
+  downloadMarkdown,
+  extractWeixinArticle,
+  scrollToAnchor
+} from "../lib"
 import { getPageState, setPageState } from "../storage"
 import type {
   BackendConfig,
@@ -21,6 +29,7 @@ export const config: PlasmoCSConfig = {
 }
 
 const ROOT_ID = "wechat-article-assistant-root"
+const STYLE_ASSET_URL = cssAssetUrl
 
 function createHost(): ShadowRoot {
   let host = document.getElementById(ROOT_ID)
@@ -32,11 +41,12 @@ function createHost(): ShadowRoot {
 
   const shadow = host.shadowRoot || host.attachShadow({ mode: "open" })
 
-  if (!shadow.querySelector("style[data-wxa-style='1']")) {
-    const style = document.createElement("style")
-    style.setAttribute("data-wxa-style", "1")
-    style.textContent = cssText
-    shadow.appendChild(style)
+  if (!shadow.querySelector("link[data-wxa-style='1']")) {
+    const link = document.createElement("link")
+    link.setAttribute("data-wxa-style", "1")
+    link.rel = "stylesheet"
+    link.href = STYLE_ASSET_URL
+    shadow.appendChild(link)
   }
 
   return shadow
@@ -50,8 +60,7 @@ async function sendMessage<TData = unknown>(message: BackgroundMessage): Promise
 function App() {
   const isWeixinPage = useMemo(() => detectWeixinArticlePage(window.location.href), [])
 
-  const [leftCollapsed, setLeftCollapsed] = useState(false)
-  const [rightCollapsed, setRightCollapsed] = useState(false)
+  const [drawerCollapsed, setDrawerCollapsed] = useState(true)
   const [backendConfig, setBackendConfig] = useState<BackendConfig>({ apiBaseUrl: "" })
   const [preference, setPreference] = useState<UserPreference>({ autoExtractOnStable: true })
   const [pageStatus, setPageStatusLocal] = useState<PageStatus>({
@@ -167,7 +176,12 @@ function App() {
   const handleSend = async () => {
     const article: WeixinArticle | undefined = pageStatusRef.current.article
     if (!article) {
-      updatePageStatus({ lastError: "请先提取文章" })
+      updatePageStatus({ lastError: "Extract an article before sending." })
+      return
+    }
+
+    if (!backendConfig.apiBaseUrl?.trim()) {
+      updatePageStatus({ lastError: "Configure an endpoint before sending." })
       return
     }
 
@@ -195,57 +209,77 @@ function App() {
     await persistCurrentPageState(nextState)
   }
 
-  const handleCopyMarkdown = async () => {
-    const article = pageStatus.article
-    const markdown = article?.markdown
-    if (!markdown) {
+  const resetCopyStatusLater = (delayMs: number) => {
+    if (copyResetTimerRef.current) {
+      window.clearTimeout(copyResetTimerRef.current)
+    }
+    copyResetTimerRef.current = window.setTimeout(() => {
+      setCopyStatus("idle")
+      setCopyMessage("")
+    }, delayMs)
+  }
+
+  const copyTextToClipboard = async (text: string | undefined, emptyMessage: string, successMessage: string) => {
+    if (!text) {
       setCopyStatus("failed")
-      setCopyMessage("无可复制内容")
-      updatePageStatus({ lastError: "没有可复制的 Markdown" })
+      setCopyMessage(emptyMessage)
+      updatePageStatus({ lastError: emptyMessage })
+      resetCopyStatusLater(3500)
       return
     }
-
-    const metadataSection = [
-      `标题: ${article.title || ""}`,
-      `作者: ${article.author || "-"}`,
-      `公众号: ${article.accountName || "-"}`,
-      `发布时间: ${article.publishTime || "-"}`,
-      `原文链接: ${article.url}`,
-      `提取时间: ${article.extractedAt || ""}`
-    ].join("\n")
-
-    const fullMarkdown = `${metadataSection}\n\n___\n\n${markdown}`
 
     try {
       setCopyStatus("copying")
       setCopyMessage("")
-      await navigator.clipboard.writeText(fullMarkdown)
+      await navigator.clipboard.writeText(text)
       setCopyStatus("success")
-      setCopyMessage("已写入剪贴板")
+      setCopyMessage(successMessage)
       updatePageStatus({ lastError: undefined })
-
-      if (copyResetTimerRef.current) {
-        window.clearTimeout(copyResetTimerRef.current)
-      }
-      copyResetTimerRef.current = window.setTimeout(() => {
-        setCopyStatus("idle")
-        setCopyMessage("")
-      }, 2500)
+      resetCopyStatusLater(2500)
     } catch (error) {
       setCopyStatus("failed")
-      setCopyMessage("请检查剪贴板权限")
+      setCopyMessage("Clipboard permission failed")
       updatePageStatus({
-        lastError: error instanceof Error ? error.message : "复制失败"
+        lastError: error instanceof Error ? error.message : "Copy failed"
       })
-
-      if (copyResetTimerRef.current) {
-        window.clearTimeout(copyResetTimerRef.current)
-      }
-      copyResetTimerRef.current = window.setTimeout(() => {
-        setCopyStatus("idle")
-        setCopyMessage("")
-      }, 3500)
+      resetCopyStatusLater(3500)
     }
+  }
+
+  const handleCopyAgentContext = async () => {
+    const article = pageStatus.article
+    await copyTextToClipboard(
+      article ? copyAgentContext(article) : undefined,
+      "No article context to copy.",
+      "AI context copied"
+    )
+  }
+
+  const handleCopyMarkdown = async () => {
+    const article = pageStatus.article
+    await copyTextToClipboard(
+      article ? buildMarkdownDocument(article) : undefined,
+      "No Markdown to copy.",
+      "Markdown copied"
+    )
+  }
+
+  const handleDownloadMarkdown = () => {
+    const article = pageStatusRef.current.article
+    if (!article) {
+      updatePageStatus({ lastError: "No article to download." })
+      return
+    }
+    downloadMarkdown(article)
+  }
+
+  const handleDownloadJson = () => {
+    const article = pageStatusRef.current.article
+    if (!article) {
+      updatePageStatus({ lastError: "No article to download." })
+      return
+    }
+    downloadJson(article)
   }
 
   useEffect(() => {
@@ -324,24 +358,22 @@ function App() {
 
   return (
     <>
-      <MetadataOutlinePanel
-        article={pageStatus.article}
-        collapsed={leftCollapsed}
-        onToggleCollapsed={() => setLeftCollapsed((prev) => !prev)}
-        onOutlineClick={(anchor) => scrollToAnchor(anchor)}
-      />
       <AssistantPanel
         pageStatus={pageStatus}
         backendConfig={backendConfig}
         autoExtractOnStable={preference.autoExtractOnStable}
         copyStatus={copyStatus}
         copyMessage={copyMessage}
-        collapsed={rightCollapsed}
-        onToggleCollapsed={() => setRightCollapsed((prev) => !prev)}
+        collapsed={drawerCollapsed}
+        onToggleCollapsed={() => setDrawerCollapsed((prev) => !prev)}
         onExtract={handleExtract}
         onReExtract={handleReExtract}
         onSend={handleSend}
+        onCopyAgentContext={handleCopyAgentContext}
         onCopyMarkdown={handleCopyMarkdown}
+        onDownloadMarkdown={handleDownloadMarkdown}
+        onDownloadJson={handleDownloadJson}
+        onApplyBackendPreset={() => setBackendConfig(COZE_WORKFLOW_PRESET)}
         onBackendConfigChange={setBackendConfig}
         onAutoExtractChange={(next) =>
           setPreference((prev) => ({
@@ -349,6 +381,7 @@ function App() {
             autoExtractOnStable: next
           }))
         }
+        onOutlineClick={(anchor) => scrollToAnchor(anchor)}
       />
     </>
   )

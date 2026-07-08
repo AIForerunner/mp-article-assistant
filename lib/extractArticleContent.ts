@@ -1,3 +1,5 @@
+import type { ArticleCodeBlock, ArticleLink } from "../types";
+
 function cleanNode(node: HTMLElement): HTMLElement {
   const clone = node.cloneNode(true) as HTMLElement;
 
@@ -69,11 +71,95 @@ function normalizeImageUrl(url: string): string {
   }
 }
 
+function normalizeContentUrl(url: string): string {
+  if (!url) return "";
+
+  const cleaned = url.trim().replace(/^['"]|['"]$/g, "").replace(/&amp;/g, "&");
+  if (
+    !cleaned ||
+    cleaned.startsWith("#") ||
+    /^javascript:/i.test(cleaned) ||
+    /^data:/i.test(cleaned) ||
+    /^blob:/i.test(cleaned)
+  ) {
+    return "";
+  }
+
+  if (cleaned.startsWith("//")) {
+    return `https:${cleaned}`;
+  }
+
+  if (/^https?:\/\//i.test(cleaned) || /^mailto:/i.test(cleaned)) {
+    return cleaned;
+  }
+
+  try {
+    return new URL(cleaned, window.location.href).toString();
+  } catch {
+    return "";
+  }
+}
+
+function normalizeVisibleText(text: string): string {
+  return text.replace(/\s+/g, " ").trim();
+}
+
+function extractLinks(container: HTMLElement): ArticleLink[] {
+  const links: ArticleLink[] = [];
+  const seenUrls = new Set<string>();
+
+  container.querySelectorAll("a[href]").forEach((anchor) => {
+    const rawHref = anchor.getAttribute("href") || "";
+    const url = normalizeContentUrl(rawHref);
+    if (!url || seenUrls.has(url)) {
+      return;
+    }
+
+    seenUrls.add(url);
+    links.push({
+      text: normalizeVisibleText(anchor.textContent || "") || url,
+      url
+    });
+  });
+
+  return links;
+}
+
+function detectCodeLanguage(node: Element): string | undefined {
+  const className = node.getAttribute("class") || "";
+  const matched = className.match(/(?:language|lang)-([a-z0-9_+-]+)/i) || className.match(/brush:\s*([a-z0-9_+-]+)/i);
+  return matched?.[1]?.toLowerCase();
+}
+
+function extractCodeBlocks(container: HTMLElement): ArticleCodeBlock[] {
+  const blocks: ArticleCodeBlock[] = [];
+  const seenCode = new Set<string>();
+
+  container.querySelectorAll("pre, .code-snippet__js, .code-snippet").forEach((block) => {
+    const codeNode = block.querySelector("code") || block;
+    const code = (codeNode.textContent || "").replace(/\n{3,}/g, "\n\n").trim();
+
+    if (!code || seenCode.has(code)) {
+      return;
+    }
+
+    seenCode.add(code);
+    blocks.push({
+      code,
+      language: detectCodeLanguage(codeNode) || detectCodeLanguage(block) || undefined
+    });
+  });
+
+  return blocks;
+}
+
 export type ExtractedContent = {
   cleanContainer: HTMLElement;
   contentHtml: string;
   contentText: string;
   images: string[];
+  links: ArticleLink[];
+  codeBlocks: ArticleCodeBlock[];
 };
 
 export function extractArticleContent(node: HTMLElement): ExtractedContent {
@@ -104,11 +190,15 @@ export function extractArticleContent(node: HTMLElement): ExtractedContent {
   });
 
   const cleanContainer = cleanNode(node);
+  const links = extractLinks(cleanContainer);
+  const codeBlocks = extractCodeBlocks(cleanContainer);
 
   return {
     cleanContainer,
     contentHtml: cleanContainer.innerHTML,
     contentText: cleanContainer.textContent?.replace(/\s+/g, " ").trim() || "",
-    images: Array.from(imageSet)
+    images: Array.from(imageSet),
+    links,
+    codeBlocks
   };
 }

@@ -8,3 +8,5 @@ export * from "./extractArticleMeta";
 export * from "./extractArticleContent";
 export * from "./convertHtmlToMarkdown";
 export * from "./extractWeixinArticle";
+export * from "./articleExports";
+export * from "./backendPresets";
