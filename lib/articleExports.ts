@@ -1,4 +1,5 @@
 import type { WeixinArticle } from "../types";
+import { DEFAULT_AI_TEMPLATE_ID, getAiTemplate, type AiTemplateId } from "./aiTemplates";
 
 function valueOrDash(value?: string): string {
   return value?.trim() || "-";
@@ -43,54 +44,90 @@ export function buildMarkdownDocument(article: WeixinArticle): string {
   return `${metadataSection}\n\n---\n\n${article.markdown || article.contentText || ""}`.trim();
 }
 
-export function copyAgentContext(article: WeixinArticle): string {
+function buildStatsSection(article: WeixinArticle): string[] {
   const stats = article.stats;
-  const links = article.links || [];
-  const codeBlocks = article.codeBlocks || [];
-  const warnings = article.extraction?.warnings || [];
-
-  const linkSection = links.length
-    ? links.map((link, index) => `${index + 1}. ${link.text}: ${link.url}`).join("\n")
-    : "-";
-
-  const codeSection = codeBlocks.length
-    ? codeBlocks
-        .map((block, index) => {
-          const language = block.language || "";
-          return `Code block ${index + 1}${language ? ` (${language})` : ""}:\n\`\`\`${language}\n${block.code}\n\`\`\``;
-        })
-        .join("\n\n")
-    : "-";
 
   return [
-    "# WeChat Official Account Article",
-    "",
-    "## Metadata",
-    `Title: ${valueOrDash(article.title)}`,
-    `Account: ${valueOrDash(article.accountName)}`,
-    `Author: ${valueOrDash(article.author)}`,
-    `Published: ${valueOrDash(article.publishTime)}`,
-    `URL: ${article.url}`,
-    `Extractor: ${article.extractorVersion}`,
+    `文本长度: ${stats?.textLength ?? article.contentText.length}`,
+    `词数: ${stats?.wordCount ?? "-"}`,
+    `图片: ${stats?.imageCount ?? article.images.length}`,
+    `链接: ${stats?.linkCount ?? article.links?.length ?? 0}`,
+    `代码块: ${stats?.codeBlockCount ?? article.codeBlocks?.length ?? 0}`,
+    `目录项: ${stats?.outlineCount ?? article.outline.length}`,
     `Confidence: ${article.extraction?.confidence ?? "-"}`,
-    `Warnings: ${warnings.length ? warnings.join("; ") : "-"}`,
-    "",
-    "## Stats",
-    `Text length: ${stats?.textLength ?? article.contentText.length}`,
-    `Words: ${stats?.wordCount ?? "-"}`,
-    `Images: ${stats?.imageCount ?? article.images.length}`,
-    `Links: ${stats?.linkCount ?? links.length}`,
-    `Code blocks: ${stats?.codeBlockCount ?? codeBlocks.length}`,
+    `Warnings: ${article.extraction?.warnings?.length ? article.extraction.warnings.join("; ") : "-"}`
+  ];
+}
+
+function buildLinksSection(article: WeixinArticle): string[] {
+  const links = article.links || [];
+  if (!links.length) {
+    return [];
+  }
+
+  return [
     "",
     "## Links",
-    linkSection,
+    ...links.map((link, index) => `${index + 1}. ${link.text || link.url}: ${link.url}`)
+  ];
+}
+
+function buildCodeBlocksSection(article: WeixinArticle): string[] {
+  const codeBlocks = article.codeBlocks || [];
+  if (!codeBlocks.length) {
+    return [];
+  }
+
+  return [
     "",
     "## Code Blocks",
-    codeSection,
+    ...codeBlocks.map((block, index) => {
+      const language = block.language || "";
+      return [
+        `Code block ${index + 1}${language ? ` (${language})` : ""}:`,
+        `\`\`\`${language}`,
+        block.code,
+        "```"
+      ].join("\n");
+    })
+  ];
+}
+
+export function buildAgentContext(
+  article: WeixinArticle,
+  templateId: AiTemplateId = DEFAULT_AI_TEMPLATE_ID
+): string {
+  const template = getAiTemplate(templateId);
+  const sections = [
+    `# ${template.name}`,
     "",
-    "## Markdown",
+    "## 文章信息",
+    `标题: ${valueOrDash(article.title)}`,
+    `公众号: ${valueOrDash(article.accountName)}`,
+    `作者: ${valueOrDash(article.author)}`,
+    `发布时间: ${valueOrDash(article.publishTime)}`,
+    `原文链接: ${article.url}`,
+    `提取时间: ${valueOrDash(article.extractedAt)}`,
+    `Extractor: ${article.extractorVersion}`,
+    "",
+    "## 提取统计信息",
+    ...buildStatsSection(article),
+    ...buildLinksSection(article),
+    ...buildCodeBlocksSection(article),
+    "",
+    "## 文章 Markdown",
     article.markdown || article.contentText || ""
-  ].join("\n");
+  ];
+
+  if (template.instruction) {
+    sections.push("", "## 任务指令", template.instruction);
+  }
+
+  return sections.join("\n").trim();
+}
+
+export function copyAgentContext(article: WeixinArticle): string {
+  return buildAgentContext(article);
 }
 
 export function downloadMarkdown(article: WeixinArticle): void {

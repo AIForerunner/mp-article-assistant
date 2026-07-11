@@ -4,16 +4,20 @@ import React, { useEffect, useMemo, useRef, useState } from "react"
 import { createRoot } from "react-dom/client"
 import { AssistantPanel } from "../components/AssistantPanel"
 import {
+  buildAgentContext,
   buildMarkdownDocument,
-  copyAgentContext,
   COZE_WORKFLOW_PRESET,
+  DEFAULT_AI_TEMPLATE_ID,
   detectWeixinArticlePage,
   downloadJson,
   downloadMarkdown,
   extractWeixinArticle,
+  isAiTemplateId,
   scrollToAnchor
 } from "../lib"
+import { UI_COPY } from "../constants/uiCopy"
 import { getPageState, setPageState } from "../storage"
+import type { AiTemplateId } from "../lib"
 import type {
   BackendConfig,
   BackgroundMessage,
@@ -72,6 +76,9 @@ function App() {
   const [copyMessage, setCopyMessage] = useState<string>("")
   const copyResetTimerRef = useRef<number | null>(null)
   const pageStatusRef = useRef<PageStatus>(pageStatus)
+  const selectedAiTemplateId: AiTemplateId = isAiTemplateId(preference.aiTemplateId)
+    ? preference.aiTemplateId
+    : DEFAULT_AI_TEMPLATE_ID
 
   useEffect(() => {
     pageStatusRef.current = pageStatus
@@ -176,12 +183,12 @@ function App() {
   const handleSend = async () => {
     const article: WeixinArticle | undefined = pageStatusRef.current.article
     if (!article) {
-      updatePageStatus({ lastError: "Extract an article before sending." })
+      updatePageStatus({ lastError: UI_COPY.errors.extractBeforeSend })
       return
     }
 
     if (!backendConfig.apiBaseUrl?.trim()) {
-      updatePageStatus({ lastError: "Configure an endpoint before sending." })
+      updatePageStatus({ lastError: UI_COPY.errors.configureEndpoint })
       return
     }
 
@@ -238,9 +245,9 @@ function App() {
       resetCopyStatusLater(2500)
     } catch (error) {
       setCopyStatus("failed")
-      setCopyMessage("Clipboard permission failed")
+      setCopyMessage(UI_COPY.copy.clipboardFailed)
       updatePageStatus({
-        lastError: error instanceof Error ? error.message : "Copy failed"
+        lastError: error instanceof Error ? error.message : UI_COPY.errors.copyFailed
       })
       resetCopyStatusLater(3500)
     }
@@ -249,9 +256,9 @@ function App() {
   const handleCopyAgentContext = async () => {
     const article = pageStatus.article
     await copyTextToClipboard(
-      article ? copyAgentContext(article) : undefined,
-      "No article context to copy.",
-      "AI context copied"
+      article ? buildAgentContext(article, selectedAiTemplateId) : undefined,
+      UI_COPY.copy.noContext,
+      UI_COPY.copy.contextCopied
     )
   }
 
@@ -259,15 +266,15 @@ function App() {
     const article = pageStatus.article
     await copyTextToClipboard(
       article ? buildMarkdownDocument(article) : undefined,
-      "No Markdown to copy.",
-      "Markdown copied"
+      UI_COPY.copy.noMarkdown,
+      UI_COPY.copy.markdownCopied
     )
   }
 
   const handleDownloadMarkdown = () => {
     const article = pageStatusRef.current.article
     if (!article) {
-      updatePageStatus({ lastError: "No article to download." })
+      updatePageStatus({ lastError: UI_COPY.errors.noArticleDownload })
       return
     }
     downloadMarkdown(article)
@@ -276,7 +283,7 @@ function App() {
   const handleDownloadJson = () => {
     const article = pageStatusRef.current.article
     if (!article) {
-      updatePageStatus({ lastError: "No article to download." })
+      updatePageStatus({ lastError: UI_COPY.errors.noArticleDownload })
       return
     }
     downloadJson(article)
@@ -362,6 +369,7 @@ function App() {
         pageStatus={pageStatus}
         backendConfig={backendConfig}
         autoExtractOnStable={preference.autoExtractOnStable}
+        selectedAiTemplateId={selectedAiTemplateId}
         copyStatus={copyStatus}
         copyMessage={copyMessage}
         collapsed={drawerCollapsed}
@@ -370,6 +378,12 @@ function App() {
         onReExtract={handleReExtract}
         onSend={handleSend}
         onCopyAgentContext={handleCopyAgentContext}
+        onAiTemplateChange={(next) =>
+          setPreference((prev) => ({
+            ...prev,
+            aiTemplateId: next
+          }))
+        }
         onCopyMarkdown={handleCopyMarkdown}
         onDownloadMarkdown={handleDownloadMarkdown}
         onDownloadJson={handleDownloadJson}

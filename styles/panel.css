@@ -103,7 +103,8 @@
 .wxa-actions button,
 .wxa-tabs button,
 .wxa-outline-item,
-.wxa-advanced-toggle {
+.wxa-advanced-toggle,
+.wxa-quality-toggle {
   border: 1px solid #cbd5e1;
   border-radius: 8px;
   background: #ffffff;
@@ -214,6 +215,83 @@
   line-height: 1.45;
 }
 
+.wxa-quality {
+  margin-top: 12px;
+  border: 1px solid #d9e2ed;
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 10px;
+}
+
+.wxa-quality.is-high {
+  border-color: #bbf7d0;
+  background: #f0fdf4;
+}
+
+.wxa-quality.is-medium {
+  border-color: #fde68a;
+  background: #fffbeb;
+}
+
+.wxa-quality.is-low {
+  border-color: #fecaca;
+  background: #fff7f7;
+}
+
+.wxa-quality-header {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  color: #40516a;
+  font-size: 12px;
+  line-height: 1.3;
+}
+
+.wxa-quality-header strong {
+  color: #0f172a;
+  font-size: 13px;
+}
+
+.wxa-quality-summary {
+  margin-top: 7px;
+  color: #334155;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.wxa-quality-warnings {
+  margin: 7px 0 0;
+  padding-left: 18px;
+  color: #40516a;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.wxa-quality-toggle {
+  margin-top: 8px;
+  min-height: 28px;
+  padding: 0 9px;
+  color: #172033;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.wxa-template-select {
+  margin-bottom: 8px;
+}
+
+.wxa-template-select span {
+  display: block;
+}
+
+.wxa-template-description {
+  margin: 0 0 10px;
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
 .wxa-actions {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -233,13 +311,15 @@
 .wxa-secondary-btn:hover,
 .wxa-icon-btn:hover,
 .wxa-outline-item:hover,
-.wxa-tabs button:hover {
+.wxa-tabs button:hover,
+.wxa-quality-toggle:hover {
   border-color: #0f766e;
   color: #0f766e;
 }
 
 .wxa-actions button:disabled,
-.wxa-icon-btn:disabled {
+.wxa-icon-btn:disabled,
+select:disabled {
   opacity: 0.48;
   cursor: not-allowed;
 }
