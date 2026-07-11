@@ -7,12 +7,11 @@ import {
   buildAgentContext,
   buildMarkdownDocument,
   COZE_WORKFLOW_PRESET,
-  DEFAULT_AI_TEMPLATE_ID,
   detectWeixinArticlePage,
   downloadJson,
   downloadMarkdown,
   extractWeixinArticle,
-  isAiTemplateId,
+  resolveAiTemplateId,
   scrollToAnchor
 } from "../lib"
 import { UI_COPY } from "../constants/uiCopy"
@@ -76,9 +75,7 @@ function App() {
   const [copyMessage, setCopyMessage] = useState<string>("")
   const copyResetTimerRef = useRef<number | null>(null)
   const pageStatusRef = useRef<PageStatus>(pageStatus)
-  const selectedAiTemplateId: AiTemplateId = isAiTemplateId(preference.aiTemplateId)
-    ? preference.aiTemplateId
-    : DEFAULT_AI_TEMPLATE_ID
+  const selectedAiTemplateId: AiTemplateId = resolveAiTemplateId(preference.aiTemplateId)
 
   useEffect(() => {
     pageStatusRef.current = pageStatus
@@ -209,7 +206,7 @@ function App() {
       ...current,
       isWeixinArticlePage: isWeixinPage,
       sendStatus: response.ok ? "success" : "failed",
-      lastError: response.ok ? undefined : response.error || "发送失败"
+      lastError: response.ok ? undefined : response.error || UI_COPY.sendStatus.failed
     }
     setPageStatusLocal(nextState)
     pageStatusRef.current = nextState
@@ -253,10 +250,10 @@ function App() {
     }
   }
 
-  const handleCopyAgentContext = async () => {
+  const handleCopyAgentContext = async (additionalRequirement?: string) => {
     const article = pageStatus.article
     await copyTextToClipboard(
-      article ? buildAgentContext(article, selectedAiTemplateId) : undefined,
+      article ? buildAgentContext(article, selectedAiTemplateId, additionalRequirement) : undefined,
       UI_COPY.copy.noContext,
       UI_COPY.copy.contextCopied
     )

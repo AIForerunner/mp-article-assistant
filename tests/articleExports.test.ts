@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { AI_TEMPLATES, buildAgentContext, type AiTemplateId } from "../lib";
+import {
+  AI_TEMPLATES,
+  buildAgentContext,
+  copyAgentContext,
+  resolveAiTemplateId,
+  type AiTemplateId
+} from "../lib";
 import type { WeixinArticle } from "../types";
 
 function createArticle(overrides: Partial<WeixinArticle> = {}): WeixinArticle {
@@ -47,8 +53,10 @@ function createArticle(overrides: Partial<WeixinArticle> = {}): WeixinArticle {
 }
 
 describe("buildAgentContext", () => {
-  it("builds content for every AI template", () => {
+  it("builds content for the five final AI templates", () => {
     const article = createArticle();
+
+    expect(AI_TEMPLATES).toHaveLength(5);
 
     for (const template of AI_TEMPLATES) {
       const content = buildAgentContext(article, template.id);
@@ -65,14 +73,37 @@ describe("buildAgentContext", () => {
     }
   });
 
-  it("does not include task instructions for context-only template", () => {
+  it("does not expose the removed weekly signal template", () => {
+    expect(AI_TEMPLATES.map((template) => template.name)).not.toContain("技术周刊素材");
+    expect(AI_TEMPLATES.map((template) => template.id)).not.toContain("weekly-signal");
+  });
+
+  it("includes article summary requirements", () => {
+    const content = buildAgentContext(createArticle(), "article-summary");
+
+    expect(content).toContain("## 分析要求");
+    expect(content).toContain("请基于文章内容完成总结");
+    expect(content).toContain("用一段话说明文章主要讲了什么");
+  });
+
+  it("includes key insight requirements", () => {
+    const content = buildAgentContext(createArticle(), "key-insights");
+
+    expect(content).toContain("## 分析要求");
+    expect(content).toContain("请提炼文章中的关键信息");
+    expect(content).toContain("区分原文结论与可进一步推导的结论");
+  });
+
+  it("does not include template requirements for context-only template", () => {
     const content = buildAgentContext(createArticle(), "context-only");
 
     expect(content).not.toContain("## 任务指令");
+    expect(content).not.toContain("## 任务要求");
+    expect(content).not.toContain("## 分析要求");
     expect(content).not.toContain("请基于文章内容完成以下分析");
   });
 
-  it("includes task instructions for task templates", () => {
+  it("includes analysis requirements for task templates", () => {
     const taskTemplateIds = AI_TEMPLATES.filter((template) => template.instruction).map(
       (template) => template.id
     ) as AiTemplateId[];
@@ -80,8 +111,43 @@ describe("buildAgentContext", () => {
     for (const templateId of taskTemplateIds) {
       const content = buildAgentContext(createArticle(), templateId);
 
-      expect(content).toContain("## 任务指令");
+      expect(content).toContain("## 分析要求");
     }
+  });
+
+  it("adds additional requirements to context-only output", () => {
+    const content = buildAgentContext(
+      createArticle(),
+      "context-only",
+      "  重点分析它对研发团队的影响。  "
+    );
+
+    expect(content).not.toContain("## 分析要求");
+    expect(content).toContain("## 补充要求");
+    expect(content).toContain("重点分析它对研发团队的影响。");
+  });
+
+  it("does not add an additional requirements section for blank text", () => {
+    const content = buildAgentContext(createArticle(), "article-summary", "   \n  ");
+
+    expect(content).not.toContain("## 补充要求");
+  });
+
+  it("keeps copyAgentContext compatible with context-only output", () => {
+    const content = copyAgentContext(createArticle());
+
+    expect(content).toContain("标题: 示例文章");
+    expect(content).toContain("## 提取统计信息");
+    expect(content).toContain("## 文章 Markdown");
+    expect(content).not.toContain("## 任务指令");
+    expect(content).not.toContain("## 任务要求");
+    expect(content).not.toContain("## 分析要求");
+  });
+
+  it("falls back from legacy stored template ids", () => {
+    expect(resolveAiTemplateId("general-analysis")).toBe("article-summary");
+    expect(resolveAiTemplateId("weekly-signal")).toBe("article-summary");
+    expect(resolveAiTemplateId("wechat-topic")).toBe("key-insights");
   });
 
   it("handles missing author, publish time, links, and code blocks", () => {

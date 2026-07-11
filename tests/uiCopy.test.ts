@@ -14,15 +14,23 @@ function collectStrings(value: unknown): string[] {
 }
 
 describe("UI_COPY", () => {
+  it("contains the product-closing copy for primary and secondary actions", () => {
+    const values = collectStrings(UI_COPY);
+
+    expect(values).toContain("带分析要求复制给 AI");
+    expect(values).toContain("复制文章 Markdown");
+    expect(values).toContain("发送到自定义接口");
+    expect(values).toContain("补充要求（可选）");
+    expect(values).toContain("带分析要求复制给 AI：复制文章内容，并附上所选分析要求，可直接粘贴到 AI 对话中。");
+    expect(values).toContain("复制文章 Markdown：仅复制整理后的文章文档，适合笔记、归档和知识库。");
+    expect(values).toContain("将文章发送到你配置的知识库、工作流或自建服务。");
+    expect(values).not.toContain("复制给 AI");
+    expect(values).not.toContain("发送到工作流");
+  });
+
   it("does not keep retired English primary UI labels", () => {
     const text = collectStrings(UI_COPY).join("\n");
 
-    expect(text).toContain("复制给 AI");
-    expect(text).toContain("复制 Markdown");
-    expect(text).toContain("下载 Markdown");
-    expect(text).toContain("下载 JSON");
-    expect(text).toContain("发送到工作流");
-    expect(text).toContain("高级设置");
     expect(text).not.toContain("Copy for AI");
     expect(text).not.toContain("Copy Markdown");
     expect(text).not.toContain("Download Markdown");

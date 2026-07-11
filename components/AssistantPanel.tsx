@@ -17,7 +17,7 @@ type AssistantPanelProps = {
   onExtract: () => void
   onReExtract: () => void
   onSend: () => void
-  onCopyAgentContext: () => void
+  onCopyAgentContext: (additionalRequirement?: string) => void
   onAiTemplateChange: (next: AiTemplateId) => void
   onCopyMarkdown: () => void
   onDownloadMarkdown: () => void
@@ -206,6 +206,7 @@ export function AssistantPanel(props: AssistantPanelProps) {
 
   const [activeTab, setActiveTab] = useState<PreviewTab>("markdown")
   const [advancedOpen, setAdvancedOpen] = useState(false)
+  const [additionalRequirement, setAdditionalRequirement] = useState("")
   const article = pageStatus.article
   const hasEndpoint = Boolean(backendConfig.apiBaseUrl?.trim())
   const canUseArticle = Boolean(article)
@@ -243,7 +244,6 @@ export function AssistantPanel(props: AssistantPanelProps) {
             <div className="wxa-header-status">
               <span className={`wxa-status-dot ${statusClass}`} />
               <span data-testid="page-detect-status">{statusLabel}</span>
-              <span className="wxa-send-state">{sendStatusText(pageStatus)}</span>
             </div>
           </div>
           <div className="wxa-header-actions">
@@ -289,7 +289,7 @@ export function AssistantPanel(props: AssistantPanelProps) {
 
           <section className="wxa-section">
             <div className="wxa-section-heading">
-              <h3>{UI_COPY.sections.actions}</h3>
+              <h3>{UI_COPY.sections.aiTemplate}</h3>
               <span data-testid="copy-status">
                 {isCopying
                   ? UI_COPY.copy.copying
@@ -317,26 +317,40 @@ export function AssistantPanel(props: AssistantPanelProps) {
             <div className="wxa-template-description" data-testid="ai-template-description">
               {AI_TEMPLATES.find((template) => template.id === selectedAiTemplateId)?.description}
             </div>
-            <div className="wxa-actions">
-              <button onClick={onCopyAgentContext} disabled={!canUseArticle || isCopying} data-testid="copy-agent-context-btn">
-                {UI_COPY.actions.copyForAi}
-              </button>
-              <button onClick={onCopyMarkdown} disabled={!canUseArticle || isCopying} data-testid="copy-markdown-btn">
-                {UI_COPY.actions.copyMarkdown}
-              </button>
-              <button onClick={onDownloadMarkdown} disabled={!canUseArticle} data-testid="download-markdown-btn">
-                {UI_COPY.actions.downloadMarkdown}
-              </button>
-              <button onClick={onDownloadJson} disabled={!canUseArticle} data-testid="download-json-btn">
-                {UI_COPY.actions.downloadJson}
-              </button>
-              <button
-                className="wxa-send-btn"
-                onClick={onSend}
-                disabled={!canUseArticle || !hasEndpoint || pageStatus.sendStatus === "sending"}
-                data-testid="send-backend-btn">
-                {UI_COPY.actions.sendWorkflow}
-              </button>
+            <label className="wxa-requirement-input">
+              <span>{UI_COPY.additionalRequirement.label}</span>
+              <textarea
+                value={additionalRequirement}
+                placeholder={UI_COPY.additionalRequirement.placeholder}
+                disabled={isCopying}
+                data-testid="additional-requirement-input"
+                onChange={(event) => setAdditionalRequirement(event.currentTarget.value)}
+              />
+              <small>{UI_COPY.additionalRequirement.help}</small>
+            </label>
+            <p className="wxa-help-text">{UI_COPY.helpers.copyForAi}</p>
+            <button
+              className="wxa-primary-action"
+              onClick={() => onCopyAgentContext(additionalRequirement)}
+              disabled={!canUseArticle || isCopying}
+              data-testid="copy-agent-context-btn">
+              {UI_COPY.actions.copyForAi}
+            </button>
+
+            <div className="wxa-document-actions">
+              <div className="wxa-inline-heading">{UI_COPY.sections.articleDocument}</div>
+              <p className="wxa-help-text">{UI_COPY.helpers.copyMarkdown}</p>
+              <div className="wxa-actions is-secondary">
+                <button onClick={onCopyMarkdown} disabled={!canUseArticle || isCopying} data-testid="copy-markdown-btn">
+                  {UI_COPY.actions.copyMarkdown}
+                </button>
+                <button onClick={onDownloadMarkdown} disabled={!canUseArticle} data-testid="download-markdown-btn">
+                  {UI_COPY.actions.downloadMarkdown}
+                </button>
+                <button onClick={onDownloadJson} disabled={!canUseArticle} data-testid="download-json-btn">
+                  {UI_COPY.actions.downloadJson}
+                </button>
+              </div>
             </div>
             {pageStatus.lastError && (
               <div className="wxa-inline-error" data-testid="error-status">
@@ -475,6 +489,16 @@ export function AssistantPanel(props: AssistantPanelProps) {
                   />
                   {UI_COPY.advanced.autoExtract}
                 </label>
+                <div className="wxa-custom-endpoint">
+                  <p className="wxa-help-text">{UI_COPY.helpers.customEndpoint}</p>
+                  <button
+                    className="wxa-secondary-btn wxa-send-btn"
+                    onClick={onSend}
+                    disabled={!canUseArticle || !hasEndpoint || pageStatus.sendStatus === "sending"}
+                    data-testid="send-backend-btn">
+                    {UI_COPY.actions.sendWorkflow}
+                  </button>
+                </div>
               </div>
             )}
           </section>

@@ -1,5 +1,5 @@
 import type { WeixinArticle } from "../types";
-import { DEFAULT_AI_TEMPLATE_ID, getAiTemplate, type AiTemplateId } from "./aiTemplates";
+import { getAiTemplate, type AiTemplateId } from "./aiTemplates";
 
 function valueOrDash(value?: string): string {
   return value?.trim() || "-";
@@ -95,9 +95,11 @@ function buildCodeBlocksSection(article: WeixinArticle): string[] {
 
 export function buildAgentContext(
   article: WeixinArticle,
-  templateId: AiTemplateId = DEFAULT_AI_TEMPLATE_ID
+  templateId: AiTemplateId,
+  additionalRequirement?: string
 ): string {
   const template = getAiTemplate(templateId);
+  const trimmedRequirement = additionalRequirement?.trim();
   const sections = [
     `# ${template.name}`,
     "",
@@ -120,14 +122,18 @@ export function buildAgentContext(
   ];
 
   if (template.instruction) {
-    sections.push("", "## 任务指令", template.instruction);
+    sections.push("", "## 分析要求", template.instruction);
+  }
+
+  if (trimmedRequirement) {
+    sections.push("", "## 补充要求", trimmedRequirement);
   }
 
   return sections.join("\n").trim();
 }
 
 export function copyAgentContext(article: WeixinArticle): string {
-  return buildAgentContext(article);
+  return buildAgentContext(article, "context-only");
 }
 
 export function downloadMarkdown(article: WeixinArticle): void {
