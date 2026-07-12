@@ -9,4 +9,6 @@ export * from "./extractArticleContent";
 export * from "./convertHtmlToMarkdown";
 export * from "./extractWeixinArticle";
 export * from "./articleExports";
+export * from "./aiTemplates";
+export * from "./extractionQuality";
 export * from "./backendPresets";

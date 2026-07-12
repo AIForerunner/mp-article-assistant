@@ -1,7 +1,7 @@
 {
   "name": "mp-article-assistant",
   "displayName": "MP Article Assistant",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Extract WeChat Official Account articles into local Markdown and JSON",
   "author": "",
   "packageManager": "pnpm@11.7.0",

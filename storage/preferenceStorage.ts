@@ -1,9 +1,11 @@
 import type { UserPreference } from "../types";
+import { DEFAULT_AI_TEMPLATE_ID } from "../lib/aiTemplates";
 import { getStorageValue, setStorageValue } from "./chromeStorage";
 import { STORAGE_KEYS } from "./keys";
 
 const DEFAULT_PREFERENCE: UserPreference = {
-  autoExtractOnStable: true
+  autoExtractOnStable: true,
+  aiTemplateId: DEFAULT_AI_TEMPLATE_ID
 };
 
 export async function getUserPreference(): Promise<UserPreference> {

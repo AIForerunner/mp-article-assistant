@@ -8,4 +8,5 @@ export type BackendConfig = {
 
 export type UserPreference = {
   autoExtractOnStable: boolean;
+  aiTemplateId?: string;
 };

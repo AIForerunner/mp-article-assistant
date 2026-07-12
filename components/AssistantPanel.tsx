@@ -1,4 +1,6 @@
 import { useMemo, useState } from "react"
+import { UI_COPY } from "../constants/uiCopy"
+import { AI_TEMPLATES, buildExtractionQualitySummary, type AiTemplateId } from "../lib"
 import type { BackendConfig, PageStatus, WeixinArticle } from "../types"
 
 type PreviewTab = "markdown" | "outline" | "metadata"
@@ -7,6 +9,7 @@ type AssistantPanelProps = {
   pageStatus: PageStatus
   backendConfig: BackendConfig
   autoExtractOnStable: boolean
+  selectedAiTemplateId: AiTemplateId
   copyStatus: "idle" | "copying" | "success" | "failed"
   copyMessage?: string
   collapsed: boolean
@@ -14,7 +17,8 @@ type AssistantPanelProps = {
   onExtract: () => void
   onReExtract: () => void
   onSend: () => void
-  onCopyAgentContext: () => void
+  onCopyAgentContext: (additionalRequirement?: string) => void
+  onAiTemplateChange: (next: AiTemplateId) => void
   onCopyMarkdown: () => void
   onDownloadMarkdown: () => void
   onDownloadJson: () => void
@@ -24,12 +28,20 @@ type AssistantPanelProps = {
   onOutlineClick: (anchor: string) => void
 }
 
-function renderPageStatus(status: PageStatus): string {
-  if (!status.isWeixinArticlePage) return "Unsupported page"
-  if (status.extractStatus === "extracting") return "Extracting"
-  if (status.extractStatus === "success") return "Extracted"
-  if (status.extractStatus === "failed") return "Needs attention"
-  return "Ready"
+function renderPageStatus(status: PageStatus, autoExtractOnStable: boolean): string {
+  if (!status.isWeixinArticlePage) return UI_COPY.status.unsupported
+  if (status.extractStatus === "extracting") return UI_COPY.status.extracting
+  if (status.extractStatus === "success") return UI_COPY.status.success
+  if (status.extractStatus === "failed") return UI_COPY.status.failed
+  return autoExtractOnStable ? UI_COPY.status.waitingStable : UI_COPY.status.idle
+}
+
+function renderCollapsedText(status: PageStatus): string {
+  if (!status.isWeixinArticlePage) return UI_COPY.status.unsupported
+  if (status.extractStatus === "extracting") return UI_COPY.collapsed.extracting
+  if (status.extractStatus === "success") return UI_COPY.collapsed.success
+  if (status.extractStatus === "failed") return UI_COPY.collapsed.failed
+  return UI_COPY.collapsed.idle
 }
 
 function statusTone(status: PageStatus): string {
@@ -40,10 +52,20 @@ function statusTone(status: PageStatus): string {
 }
 
 function sendStatusText(status: PageStatus): string {
-  if (status.sendStatus === "sending") return "Sending"
-  if (status.sendStatus === "success") return "Sent"
-  if (status.sendStatus === "failed") return "Send failed"
-  return "Not sent"
+  if (status.sendStatus === "sending") return UI_COPY.sendStatus.sending
+  if (status.sendStatus === "success") return UI_COPY.sendStatus.success
+  if (status.sendStatus === "failed") return UI_COPY.sendStatus.failed
+  return UI_COPY.sendStatus.idle
+}
+
+function getCopyToAiHelpText(templateId: AiTemplateId, additionalRequirement: string): string {
+  if (templateId !== "context-only") {
+    return UI_COPY.helpers.copyForAiWithAnalysis
+  }
+
+  return additionalRequirement.trim()
+    ? UI_COPY.helpers.copyForAiContextWithRequirement
+    : UI_COPY.helpers.copyForAiContextOnly
 }
 
 function formatStat(value: number | undefined): string {
@@ -77,10 +99,43 @@ function buildMetadataPreview(article: WeixinArticle) {
 function EmptyState({ onExtract }: { onExtract: () => void }) {
   return (
     <div className="wxa-empty-state">
-      <div>No article extracted yet.</div>
+      <div>{UI_COPY.empty.noArticle}</div>
       <button className="wxa-secondary-btn" onClick={onExtract} data-testid="extract-article-btn">
-        Extract article
+        {UI_COPY.actions.extractArticle}
       </button>
+    </div>
+  )
+}
+
+function ExtractionQualityCard({ article }: { article?: WeixinArticle }) {
+  const [expanded, setExpanded] = useState(false)
+  const quality = buildExtractionQualitySummary(article?.extraction)
+  const visibleWarnings = expanded ? quality.warnings : quality.warnings.slice(0, 1)
+
+  return (
+    <div className={`wxa-quality is-${quality.level}`} data-testid="extraction-quality">
+      <div className="wxa-quality-header">
+        <span>{UI_COPY.quality.label}</span>
+        <strong>{quality.label}</strong>
+        <span>
+          {UI_COPY.quality.confidence} {quality.confidenceText}
+        </span>
+      </div>
+      <div className="wxa-quality-summary" data-testid="extraction-quality-summary">
+        {quality.summary}
+      </div>
+      {visibleWarnings.length > 0 && (
+        <ul className="wxa-quality-warnings" data-testid="extraction-warning-list">
+          {visibleWarnings.map((warning) => (
+            <li key={warning}>{warning}</li>
+          ))}
+        </ul>
+      )}
+      {quality.warnings.length > 1 && (
+        <button className="wxa-quality-toggle" onClick={() => setExpanded((prev) => !prev)}>
+          {expanded ? UI_COPY.quality.collapseWarnings : UI_COPY.quality.expandWarnings}
+        </button>
+      )}
     </div>
   )
 }
@@ -114,7 +169,7 @@ function PreviewPane({
             </button>
           ))
         ) : (
-          <div className="wxa-empty">No semantic headings found.</div>
+          <div className="wxa-empty">{UI_COPY.empty.noHeadings}</div>
         )}
       </div>
     )
@@ -130,7 +185,7 @@ function PreviewPane({
 
   return (
     <pre className="wxa-preview-code" data-testid="markdown-preview">
-      {article.markdown || article.contentText || "No Markdown output."}
+      {article.markdown || article.contentText || UI_COPY.empty.noMarkdown}
     </pre>
   )
 }
@@ -142,11 +197,13 @@ export function AssistantPanel(props: AssistantPanelProps) {
     collapsed,
     copyStatus,
     copyMessage,
+    selectedAiTemplateId,
     onToggleCollapsed,
     onExtract,
     onReExtract,
     onSend,
     onCopyAgentContext,
+    onAiTemplateChange,
     onCopyMarkdown,
     onDownloadMarkdown,
     onDownloadJson,
@@ -159,11 +216,12 @@ export function AssistantPanel(props: AssistantPanelProps) {
 
   const [activeTab, setActiveTab] = useState<PreviewTab>("markdown")
   const [advancedOpen, setAdvancedOpen] = useState(false)
+  const [additionalRequirement, setAdditionalRequirement] = useState("")
   const article = pageStatus.article
   const hasEndpoint = Boolean(backendConfig.apiBaseUrl?.trim())
   const canUseArticle = Boolean(article)
   const isCopying = copyStatus === "copying"
-  const statusLabel = renderPageStatus(pageStatus)
+  const statusLabel = renderPageStatus(pageStatus, autoExtractOnStable)
   const statusClass = statusTone(pageStatus)
 
   const stats = useMemo(
@@ -181,7 +239,7 @@ export function AssistantPanel(props: AssistantPanelProps) {
       <div className="wxa-root is-collapsed" data-testid="assistant-panel-root">
         <button className="wxa-launcher" onClick={onToggleCollapsed} data-testid="panel-toggle-btn">
           <span className={`wxa-status-dot ${statusClass}`} />
-          <span>MP Article</span>
+          <span>{renderCollapsedText(pageStatus)}</span>
         </button>
       </div>
     )
@@ -189,83 +247,120 @@ export function AssistantPanel(props: AssistantPanelProps) {
 
   return (
     <div className="wxa-root" data-testid="assistant-panel-root">
-      <aside className="wxa-drawer" aria-label="MP Article Assistant drawer">
+      <aside className="wxa-drawer" aria-label={UI_COPY.drawerLabel}>
         <header className="wxa-header">
           <div>
-            <h2>MP Article Assistant</h2>
+            <h2>{UI_COPY.productName}</h2>
             <div className="wxa-header-status">
               <span className={`wxa-status-dot ${statusClass}`} />
               <span data-testid="page-detect-status">{statusLabel}</span>
-              <span className="wxa-send-state">{sendStatusText(pageStatus)}</span>
             </div>
           </div>
           <div className="wxa-header-actions">
             <button className="wxa-icon-btn" onClick={article ? onReExtract : onExtract} data-testid="reextract-article-btn">
-              Refresh
+              {UI_COPY.actions.refresh}
             </button>
             <button className="wxa-icon-btn" onClick={onToggleCollapsed} data-testid="panel-toggle-btn">
-              Collapse
+              {UI_COPY.actions.collapse}
             </button>
           </div>
         </header>
 
         <div className="wxa-scroll">
           <section className="wxa-section wxa-summary-section">
-            <div className="wxa-summary-title">{article?.title || "No article extracted"}</div>
+            <div className="wxa-summary-title">{article?.title || UI_COPY.summary.noArticle}</div>
             <div className="wxa-summary-meta">
-              <span>{article?.accountName || "Account unknown"}</span>
-              <span>{article?.publishTime || "Publish time unknown"}</span>
+              <span>{article?.accountName || UI_COPY.summary.accountUnknown}</span>
+              <span>{article?.publishTime || UI_COPY.summary.publishTimeUnknown}</span>
             </div>
             <div className="wxa-stat-grid">
               <div>
-                <span>Text</span>
+                <span>{UI_COPY.summary.stats.text}</span>
                 <strong>{formatStat(stats.text)}</strong>
               </div>
               <div>
-                <span>Images</span>
+                <span>{UI_COPY.summary.stats.images}</span>
                 <strong>{formatStat(stats.images)}</strong>
               </div>
               <div>
-                <span>Links</span>
+                <span>{UI_COPY.summary.stats.links}</span>
                 <strong>{formatStat(stats.links)}</strong>
               </div>
               <div>
-                <span>Code</span>
+                <span>{UI_COPY.summary.stats.code}</span>
                 <strong>{formatStat(stats.code)}</strong>
               </div>
             </div>
+            {article && <ExtractionQualityCard article={article} />}
             <p className="wxa-privacy-copy">
-              By default, content stays in your browser. It is only sent when you configure an endpoint and click Send.
+              {UI_COPY.summary.privacy}
             </p>
           </section>
 
           <section className="wxa-section">
             <div className="wxa-section-heading">
-              <h3>Actions</h3>
+              <h3>{UI_COPY.sections.aiTemplate}</h3>
               <span data-testid="copy-status">
-                {isCopying ? "Copying" : copyStatus === "success" ? "Copied" : copyStatus === "failed" ? "Copy failed" : copyMessage || ""}
+                {isCopying
+                  ? UI_COPY.copy.copying
+                  : copyStatus === "success"
+                    ? copyMessage || UI_COPY.copy.success
+                    : copyStatus === "failed"
+                      ? copyMessage || UI_COPY.copy.failed
+                      : copyMessage || UI_COPY.copy.idle}
               </span>
             </div>
-            <div className="wxa-actions">
-              <button onClick={onCopyAgentContext} disabled={!canUseArticle || isCopying} data-testid="copy-agent-context-btn">
-                Copy for AI
-              </button>
-              <button onClick={onCopyMarkdown} disabled={!canUseArticle || isCopying} data-testid="copy-markdown-btn">
-                Copy Markdown
-              </button>
-              <button onClick={onDownloadMarkdown} disabled={!canUseArticle} data-testid="download-markdown-btn">
-                Download Markdown
-              </button>
-              <button onClick={onDownloadJson} disabled={!canUseArticle} data-testid="download-json-btn">
-                Download JSON
-              </button>
-              <button
-                className="wxa-send-btn"
-                onClick={onSend}
-                disabled={!canUseArticle || !hasEndpoint || pageStatus.sendStatus === "sending"}
-                data-testid="send-backend-btn">
-                Send to workflow
-              </button>
+            <label className="wxa-template-select">
+              <span>{UI_COPY.sections.template}</span>
+              <select
+                value={selectedAiTemplateId}
+                disabled={!canUseArticle || isCopying}
+                data-testid="ai-template-select"
+                onChange={(event) => onAiTemplateChange(event.currentTarget.value as AiTemplateId)}>
+                {AI_TEMPLATES.map((template) => (
+                  <option key={template.id} value={template.id}>
+                    {template.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <div className="wxa-template-description" data-testid="ai-template-description">
+              {AI_TEMPLATES.find((template) => template.id === selectedAiTemplateId)?.description}
+            </div>
+            <label className="wxa-requirement-input">
+              <span>{UI_COPY.additionalRequirement.label}</span>
+              <textarea
+                value={additionalRequirement}
+                placeholder={UI_COPY.additionalRequirement.placeholder}
+                disabled={isCopying}
+                data-testid="additional-requirement-input"
+                onChange={(event) => setAdditionalRequirement(event.currentTarget.value)}
+              />
+              <small>{UI_COPY.additionalRequirement.help}</small>
+            </label>
+            <p className="wxa-help-text">{getCopyToAiHelpText(selectedAiTemplateId, additionalRequirement)}</p>
+            <button
+              className="wxa-primary-action"
+              onClick={() => onCopyAgentContext(additionalRequirement)}
+              disabled={!canUseArticle || isCopying}
+              data-testid="copy-agent-context-btn">
+              {UI_COPY.actions.copyForAi}
+            </button>
+
+            <div className="wxa-document-actions">
+              <div className="wxa-inline-heading">{UI_COPY.sections.articleDocument}</div>
+              <p className="wxa-help-text">{UI_COPY.helpers.copyMarkdown}</p>
+              <div className="wxa-actions is-secondary">
+                <button onClick={onCopyMarkdown} disabled={!canUseArticle || isCopying} data-testid="copy-markdown-btn">
+                  {UI_COPY.actions.copyMarkdown}
+                </button>
+                <button onClick={onDownloadMarkdown} disabled={!canUseArticle} data-testid="download-markdown-btn">
+                  {UI_COPY.actions.downloadMarkdown}
+                </button>
+                <button onClick={onDownloadJson} disabled={!canUseArticle} data-testid="download-json-btn">
+                  {UI_COPY.actions.downloadJson}
+                </button>
+              </div>
             </div>
             {pageStatus.lastError && (
               <div className="wxa-inline-error" data-testid="error-status">
@@ -273,16 +368,13 @@ export function AssistantPanel(props: AssistantPanelProps) {
               </div>
             )}
             <div className="wxa-small-status" data-testid="extract-status">
-              Extraction: {statusLabel}
-              {pageStatus.lastExtractedAt ? ` at ${pageStatus.lastExtractedAt}` : ""}
-            </div>
-            <div className="wxa-small-status" data-testid="send-status">
-              Workflow: {sendStatusText(pageStatus)}
+              {UI_COPY.statusLine.extraction}: {statusLabel}
+              {pageStatus.lastExtractedAt ? ` · ${UI_COPY.statusLine.extractedAt}: ${pageStatus.lastExtractedAt}` : ""}
             </div>
           </section>
 
           <section className="wxa-section">
-            <div className="wxa-tabs" role="tablist" aria-label="Article preview">
+            <div className="wxa-tabs" role="tablist" aria-label={UI_COPY.sections.preview}>
               {(["markdown", "outline", "metadata"] as const).map((tab) => (
                 <button
                   key={tab}
@@ -291,7 +383,7 @@ export function AssistantPanel(props: AssistantPanelProps) {
                   role="tab"
                   aria-selected={activeTab === tab}
                   data-testid={`preview-tab-${tab}`}>
-                  {tab === "markdown" ? "Markdown" : tab === "outline" ? "Outline" : "Metadata"}
+                  {UI_COPY.tabs[tab]}
                 </button>
               ))}
             </div>
@@ -311,23 +403,23 @@ export function AssistantPanel(props: AssistantPanelProps) {
               onClick={() => setAdvancedOpen((prev) => !prev)}
               aria-expanded={advancedOpen}
               data-testid="advanced-settings-toggle">
-              <span>Advanced settings</span>
-              <span>{advancedOpen ? "Hide" : "Show"}</span>
+              <span>{UI_COPY.actions.advancedSettings}</span>
+              <span>{advancedOpen ? UI_COPY.advanced.hide : UI_COPY.advanced.show}</span>
             </button>
 
             {advancedOpen && (
               <div className="wxa-advanced">
                 <div className="wxa-config-toolbar">
                   <button className="wxa-secondary-btn" onClick={onApplyBackendPreset} data-testid="coze-preset-btn">
-                    Use Coze preset
+                    {UI_COPY.actions.useCozePreset}
                   </button>
                 </div>
                 <label>
-                  Endpoint URL
+                  {UI_COPY.advanced.endpointUrl}
                   <input
                     data-testid="backend-url-input"
                     value={backendConfig.apiBaseUrl}
-                    placeholder="https://example.com/workflow"
+                    placeholder={UI_COPY.advanced.endpointPlaceholder}
                     onChange={(event) =>
                       onBackendConfigChange({
                         ...backendConfig,
@@ -337,12 +429,12 @@ export function AssistantPanel(props: AssistantPanelProps) {
                   />
                 </label>
                 <label>
-                  API Token
+                  {UI_COPY.advanced.apiToken}
                   <input
                     type="password"
                     data-testid="backend-token-input"
                     value={backendConfig.apiToken || ""}
-                    placeholder="Optional bearer token"
+                    placeholder={UI_COPY.advanced.tokenPlaceholder}
                     onChange={(event) =>
                       onBackendConfigChange({
                         ...backendConfig,
@@ -352,7 +444,7 @@ export function AssistantPanel(props: AssistantPanelProps) {
                   />
                 </label>
                 <label>
-                  Method
+                  {UI_COPY.advanced.method}
                   <select
                     data-testid="backend-method-select"
                     value={backendConfig.requestMethod || "POST"}
@@ -368,7 +460,7 @@ export function AssistantPanel(props: AssistantPanelProps) {
                   </select>
                 </label>
                 <label>
-                  Headers JSON
+                  {UI_COPY.advanced.headersJson}
                   <textarea
                     data-testid="backend-headers-input"
                     value={backendConfig.customHeadersJson || ""}
@@ -382,7 +474,7 @@ export function AssistantPanel(props: AssistantPanelProps) {
                   />
                 </label>
                 <label>
-                  Body Template JSON
+                  {UI_COPY.advanced.bodyTemplateJson}
                   <textarea
                     data-testid="backend-body-template-input"
                     value={backendConfig.requestBodyTemplate || ""}
@@ -402,8 +494,26 @@ export function AssistantPanel(props: AssistantPanelProps) {
                     checked={autoExtractOnStable}
                     onChange={(event) => onAutoExtractChange(event.currentTarget.checked)}
                   />
-                  Auto extract when article settles
+                  {UI_COPY.advanced.autoExtract}
                 </label>
+                <div className="wxa-custom-endpoint">
+                  <p className="wxa-help-text">{UI_COPY.helpers.customEndpoint}</p>
+                  <button
+                    className="wxa-secondary-btn wxa-send-btn"
+                    onClick={onSend}
+                    disabled={!canUseArticle || !hasEndpoint || pageStatus.sendStatus === "sending"}
+                    data-testid="send-backend-btn">
+                    {UI_COPY.actions.sendWorkflow}
+                  </button>
+                  <div className="wxa-small-status" data-testid="send-status">
+                    {UI_COPY.statusLine.workflow}: {sendStatusText(pageStatus)}
+                  </div>
+                  {pageStatus.sendStatus === "failed" && pageStatus.lastError && (
+                    <div className="wxa-inline-error" data-testid="send-error-status">
+                      {pageStatus.lastError}
+                    </div>
+                  )}
+                </div>
               </div>
             )}
           </section>
