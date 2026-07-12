@@ -24,7 +24,7 @@ export const UI_COPY = {
   actions: {
     refresh: "重新提取",
     collapse: "收起",
-    copyForAi: "带分析要求复制给 AI",
+    copyForAi: "复制到 AI",
     copyMarkdown: "复制文章 Markdown",
     downloadMarkdown: "下载 Markdown",
     downloadJson: "下载 JSON",
@@ -42,7 +42,9 @@ export const UI_COPY = {
     template: "分析模板"
   },
   helpers: {
-    copyForAi: "带分析要求复制给 AI：复制文章内容，并附上所选分析要求，可直接粘贴到 AI 对话中。",
+    copyForAiWithAnalysis: "复制文章内容和所选分析要求，可直接粘贴到 AI 对话中。",
+    copyForAiContextOnly: "复制结构化文章上下文，可粘贴到 AI 对话后自行提问。",
+    copyForAiContextWithRequirement: "复制文章上下文和本次补充要求，可直接粘贴到 AI 对话中。",
     copyMarkdown: "复制文章 Markdown：仅复制整理后的文章文档，适合笔记、归档和知识库。",
     customEndpoint: "将文章发送到你配置的知识库、工作流或自建服务。"
   },

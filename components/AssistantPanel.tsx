@@ -58,6 +58,16 @@ function sendStatusText(status: PageStatus): string {
   return UI_COPY.sendStatus.idle
 }
 
+function getCopyToAiHelpText(templateId: AiTemplateId, additionalRequirement: string): string {
+  if (templateId !== "context-only") {
+    return UI_COPY.helpers.copyForAiWithAnalysis
+  }
+
+  return additionalRequirement.trim()
+    ? UI_COPY.helpers.copyForAiContextWithRequirement
+    : UI_COPY.helpers.copyForAiContextOnly
+}
+
 function formatStat(value: number | undefined): string {
   return typeof value === "number" ? String(value) : "-"
 }
@@ -328,7 +338,7 @@ export function AssistantPanel(props: AssistantPanelProps) {
               />
               <small>{UI_COPY.additionalRequirement.help}</small>
             </label>
-            <p className="wxa-help-text">{UI_COPY.helpers.copyForAi}</p>
+            <p className="wxa-help-text">{getCopyToAiHelpText(selectedAiTemplateId, additionalRequirement)}</p>
             <button
               className="wxa-primary-action"
               onClick={() => onCopyAgentContext(additionalRequirement)}
@@ -360,9 +370,6 @@ export function AssistantPanel(props: AssistantPanelProps) {
             <div className="wxa-small-status" data-testid="extract-status">
               {UI_COPY.statusLine.extraction}: {statusLabel}
               {pageStatus.lastExtractedAt ? ` · ${UI_COPY.statusLine.extractedAt}: ${pageStatus.lastExtractedAt}` : ""}
-            </div>
-            <div className="wxa-small-status" data-testid="send-status">
-              {UI_COPY.statusLine.workflow}: {sendStatusText(pageStatus)}
             </div>
           </section>
 
@@ -498,6 +505,14 @@ export function AssistantPanel(props: AssistantPanelProps) {
                     data-testid="send-backend-btn">
                     {UI_COPY.actions.sendWorkflow}
                   </button>
+                  <div className="wxa-small-status" data-testid="send-status">
+                    {UI_COPY.statusLine.workflow}: {sendStatusText(pageStatus)}
+                  </div>
+                  {pageStatus.sendStatus === "failed" && pageStatus.lastError && (
+                    <div className="wxa-inline-error" data-testid="send-error-status">
+                      {pageStatus.lastError}
+                    </div>
+                  )}
                 </div>
               </div>
             )}
