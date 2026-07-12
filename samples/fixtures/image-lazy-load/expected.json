@@ -1,0 +1,17 @@
+{
+  "titleRequired": true,
+  "accountRequired": true,
+  "minTextLength": 50,
+  "minImageCount": 2,
+  "minOutlineCount": 0,
+  "markdownContains": [
+    "https://example.invalid/images/one.png",
+    "https://example.invalid/images/two.jpg"
+  ],
+  "markdownNotContains": [
+    "<script",
+    "javascript:",
+    "about:blank",
+    "data:image"
+  ]
+}

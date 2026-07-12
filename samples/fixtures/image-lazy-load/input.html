@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <title>懒加载图片 fixture</title>
+  <meta property="og:image" content="https://example.invalid/images/cover.png">
+</head>
+<body>
+  <h1 id="activity-name">懒加载图片 fixture</h1>
+  <span id="js_name">测试公众号</span>
+  <span id="publish_time">2026-07-12</span>
+  <div id="js_content">
+    <p>图片段落验证 data-src、data-original 和占位 src 的恢复。</p>
+    <img src="data:image/gif;base64,R0lGODlhAQABAAAAACw=" data-src="https://example.invalid/images/one.png" alt="图一">
+    <img src="about:blank" data-original="https://example.invalid/images/two.jpg" alt="图二">
+    <p>结尾段落确认 Markdown 中不残留占位图片地址或内联图片数据。</p>
+  </div>
+</body>
+</html>

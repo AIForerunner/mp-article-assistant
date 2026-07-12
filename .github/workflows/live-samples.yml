@@ -1,0 +1,68 @@
+name: Live Samples
+
+on:
+  workflow_dispatch:
+    inputs:
+      limit:
+        description: "Optional number of live samples to collect"
+        required: false
+        type: string
+      headed:
+        description: "Run with a headed browser"
+        required: false
+        default: false
+        type: boolean
+  schedule:
+    - cron: "20 18 * * 0"
+
+jobs:
+  collect-live-samples:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.7.0
+          run_install: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Chromium
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Collect live samples
+        run: |
+          ARGS=""
+          if [ -n "${{ inputs.limit }}" ]; then
+            ARGS="$ARGS --limit ${{ inputs.limit }}"
+          fi
+          if [ "${{ inputs.headed }}" = "true" ]; then
+            ARGS="$ARGS --headed"
+          fi
+          pnpm samples:collect -- $ARGS
+
+      - name: Regenerate summary
+        if: always()
+        run: pnpm samples:report
+
+      - name: Upload live sample artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: live-sample-report
+          path: |
+            samples/reports/latest/**
+            samples/captures/**/metadata.json
+            samples/captures/**/report.json
+            samples/captures/**/screenshot.png

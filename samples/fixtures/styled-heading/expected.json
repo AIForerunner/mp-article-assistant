@@ -1,0 +1,14 @@
+{
+  "titleRequired": true,
+  "accountRequired": true,
+  "minTextLength": 60,
+  "maxOutlineCount": 0,
+  "markdownContains": [
+    "视觉标题但不是语义标题"
+  ],
+  "markdownNotContains": [
+    "<script",
+    "javascript:",
+    "about:blank"
+  ]
+}

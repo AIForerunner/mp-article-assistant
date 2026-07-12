@@ -1,0 +1,17 @@
+{
+  "titleRequired": true,
+  "accountRequired": true,
+  "minTextLength": 80,
+  "minImageCount": 0,
+  "minOutlineCount": 2,
+  "minLinkCount": 1,
+  "markdownContains": [
+    "## 测试章节一",
+    "### 测试小节"
+  ],
+  "markdownNotContains": [
+    "<script",
+    "javascript:",
+    "about:blank"
+  ]
+}

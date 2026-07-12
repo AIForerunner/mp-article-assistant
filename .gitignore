@@ -4,3 +4,7 @@ build
 .pnpm-store
 .DS_Store
 coverage
+samples/captures/
+samples/reports/latest/
+playwright-report/
+test-results/
