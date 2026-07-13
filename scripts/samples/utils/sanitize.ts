@@ -3,6 +3,8 @@ import { JSDOM } from "jsdom";
 const INVISIBLE_CHARS = /[\u200B-\u200D\uFEFF\u00AD]/g;
 const COMMON_PUNCTUATION =
   /[\s!"#$%&'()*+,\-./:;<=>?@[\\\]^_`{|}~，。！？、；：“”‘’（）【】《》〈〉·…—～￥]/g;
+const URL_LIKE_PATTERN = /(?:https?:)?\/\/[^\s"'<>),]+|data:[^\s"'<>),]+|blob:[^\s"'<>),]+/gi;
+const STYLE_URL_PATTERN = /url\(\s*(['"]?)([^'")]+)\1\s*\)/gi;
 
 export function normalizeComparableText(input?: string): string {
   return (input || "")
@@ -99,6 +101,33 @@ export function sanitizePublicUrl(rawUrl: string, index: number, kind: "image" |
   }
 }
 
+function sanitizeResourceUrl(index: number): string {
+  return `https://example.invalid/resources/fixture-${String(index).padStart(3, "0")}`;
+}
+
+function sanitizeInlineStyle(value: string, nextIndex: () => number): string {
+  return value.replace(STYLE_URL_PATTERN, () => `url(${sanitizeResourceUrl(nextIndex())})`);
+}
+
+function sanitizeUrlFragments(value: string, nextIndex: () => number): string {
+  return value.replace(URL_LIKE_PATTERN, (match) => {
+    if (/example\.invalid/i.test(match)) {
+      return match;
+    }
+    return sanitizeResourceUrl(nextIndex());
+  });
+}
+
+function sanitizeAttributeValue(name: string, value: string, nextIndex: () => number): string {
+  if (!value) {
+    return value;
+  }
+  if (name === "style") {
+    return sanitizeUrlFragments(sanitizeInlineStyle(value, nextIndex), nextIndex);
+  }
+  return sanitizeUrlFragments(value, nextIndex);
+}
+
 function replacementTextFor(el: Element | null, index: number): string {
   const tag = el?.tagName.toLowerCase();
   if (tag && /^h[1-6]$/.test(tag)) {
@@ -136,6 +165,12 @@ function forEachElement(root: Element, callback: (element: Element) => void): vo
 function scrubAttributes(root: Element): void {
   let imageIndex = 1;
   let linkIndex = 1;
+  let resourceIndex = 1;
+  const nextResourceIndex = () => {
+    const current = resourceIndex;
+    resourceIndex += 1;
+    return current;
+  };
 
   forEachElement(root, (element) => {
     for (const attr of Array.from(element.attributes)) {
@@ -147,6 +182,12 @@ function scrubAttributes(root: Element): void {
         name.includes("token")
       ) {
         element.removeAttribute(attr.name);
+        continue;
+      }
+
+      const sanitizedValue = sanitizeAttributeValue(name, attr.value, nextResourceIndex);
+      if (sanitizedValue !== attr.value) {
+        element.setAttribute(attr.name, sanitizedValue);
       }
     }
 

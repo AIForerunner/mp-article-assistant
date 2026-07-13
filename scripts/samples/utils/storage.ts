@@ -82,14 +82,15 @@ export async function readCaptureReport(root: string, sampleId: string): Promise
 
 export async function readCaptureReportsByIds(
   root: string,
-  sampleIds: string[]
+  sampleIds: string[],
+  runId?: string
 ): Promise<{ reports: ArticleReport[]; missingIds: string[] }> {
   const reports: ArticleReport[] = [];
   const missingIds: string[] = [];
 
   for (const sampleId of sampleIds) {
     const report = await readCaptureReport(root, sampleId);
-    if (report) {
+    if (report && (!runId || report.runId === runId)) {
       reports.push(report);
     } else {
       missingIds.push(sampleId);

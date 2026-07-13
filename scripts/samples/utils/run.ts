@@ -23,8 +23,9 @@ export function finishRunManifest(manifest: RunManifest, now = new Date()): RunM
   };
 }
 
-function buildMetadata(sample: LiveSample, browserVersion: string): CaptureMetadata {
+function buildMetadata(sample: LiveSample, browserVersion: string, runId: string): CaptureMetadata {
   return {
+    runId,
     id: sample.id,
     url: sample.url,
     expectedAccount: sample.account,
@@ -48,15 +49,17 @@ export async function ensureReportsForSelected(input: {
   selected: LiveSample[];
   captureRoot: string;
   browserVersion: string;
+  runId: string;
   batchResults?: BatchResult<ArticleReport>[];
 }): Promise<{ reports: ArticleReport[]; missingReportIds: string[] }> {
   const selectedIds = input.selected.map((sample) => sample.id);
-  const before = await readCaptureReportsByIds(input.captureRoot, selectedIds);
+  const before = await readCaptureReportsByIds(input.captureRoot, selectedIds, input.runId);
   const missingSamples = input.selected.filter((sample) => before.missingIds.includes(sample.id));
 
   for (const sample of missingSamples) {
     const report = buildFailureReport({
       sample,
+      runId: input.runId,
       loadStatus: "unknown",
       durationMs: 0,
       message: errorMessageFor(sample, input.batchResults || []),
@@ -65,7 +68,7 @@ export async function ensureReportsForSelected(input: {
 
     await writeCapturePayload(input.captureRoot, {
       sample,
-      metadata: buildMetadata(sample, input.browserVersion),
+      metadata: buildMetadata(sample, input.browserVersion, input.runId),
       pageHtml: "",
       contentHtml: "",
       article: null,
@@ -74,7 +77,7 @@ export async function ensureReportsForSelected(input: {
     });
   }
 
-  const after = await readCaptureReportsByIds(input.captureRoot, selectedIds);
+  const after = await readCaptureReportsByIds(input.captureRoot, selectedIds, input.runId);
   return {
     reports: after.reports,
     missingReportIds: before.missingIds

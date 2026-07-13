@@ -34,6 +34,7 @@ const sample: LiveSample = {
 
 function report(overrides: Partial<ArticleReport>): ArticleReport {
   return {
+    runId: "run-test",
     id: "sample-001",
     url: "https://mp.weixin.qq.com/s/demo",
     status: "passed",
@@ -224,6 +225,28 @@ describe("sample batch, fixture sanitization, and regression assertions", () => 
     expect(sanitized).toContain("https://example.invalid/links/");
   });
 
+  it("sanitizes URL-bearing attributes and inline style resources", () => {
+    const sanitized = sanitizeFixtureHtml(
+      [
+        '<section style="color:red;background-image:url(https://mmbiz.qpic.cn/private.png)">',
+        "<p>真实正文</p>",
+        '<video src="https://mmbiz.qpic.cn/video.mp4" poster="https://mmbiz.qpic.cn/poster.png">',
+        '<source src="https://mmbiz.qpic.cn/source.mp4" srcset="https://mmbiz.qpic.cn/a.png 1x">',
+        "</video>",
+        '<audio src="blob:https://mp.weixin.qq.com/private"></audio>',
+        '<svg><image href="https://mmbiz.qpic.cn/svg.png" xlink:href="//mmbiz.qpic.cn/xlink.png"></image></svg>',
+        "</section>"
+      ].join(""),
+      "资源脱敏"
+    );
+
+    expect(sanitized).not.toContain("mmbiz.qpic.cn");
+    expect(sanitized).not.toContain("mp.weixin.qq.com");
+    expect(sanitized).not.toContain("真实正文");
+    expect(sanitized).toContain("color:red");
+    expect(sanitized).toContain("example.invalid");
+  });
+
   it("standardizes captured outerHTML to a single article root", () => {
     const sanitized = sanitizeFixtureHtml(
       '<div id="js_content" class="rich_media_content" style="color: red;"><section><div id="js_content"><p>真实正文</p></div></section></div>',
@@ -274,6 +297,7 @@ describe("sample batch, fixture sanitization, and regression assertions", () => 
     await writeCapturePayload(captureRoot, {
       sample,
       metadata: {
+        runId: "run-test",
         id: sample.id,
         url: sample.url,
         expectedAccount: sample.account,
@@ -319,6 +343,7 @@ describe("sample batch, fixture sanitization, and regression assertions", () => 
       selected: [sample],
       captureRoot,
       browserVersion: "chromium-test",
+      runId: "run-current",
       batchResults: [{ sample, ok: false, error: new Error("newPage failed") }]
     });
 
@@ -328,6 +353,7 @@ describe("sample batch, fixture sanitization, and regression assertions", () => 
       id: sample.id,
       status: "failed",
       loadStatus: "unknown",
+      runId: "run-current",
       categories: ["unknown"]
     });
     expect(result.reports[0].errors[0]).toContain("newPage failed");
@@ -343,6 +369,7 @@ describe("sample batch, fixture sanitization, and regression assertions", () => 
       selected: [sample],
       captureRoot,
       browserVersion: "chromium-test",
+      runId: "run-current",
       batchResults: [{ sample, ok: false, error: new Error("writeCapturePayload failed") }]
     });
 
@@ -372,6 +399,7 @@ describe("sample batch, fixture sanitization, and regression assertions", () => 
     await writeCapturePayload(captureRoot, {
       sample,
       metadata: {
+        runId: "run-test",
         id: sample.id,
         url: sample.url,
         expectedAccount: sample.account,
@@ -390,6 +418,7 @@ describe("sample batch, fixture sanitization, and regression assertions", () => 
     await writeCapturePayload(captureRoot, {
       sample: oldSample,
       metadata: {
+        runId: "old-run",
         id: oldSample.id,
         url: oldSample.url,
         expectedAccount: oldSample.account,
@@ -410,6 +439,7 @@ describe("sample batch, fixture sanitization, and regression assertions", () => 
       selected: [sample, sampleTwo],
       captureRoot,
       browserVersion: "chromium-test",
+      runId: "run-test",
       batchResults: [{ sample: sampleTwo, ok: false, error: new Error("worker failed") }]
     });
     const { summary, reports } = await generateBatchReport({
@@ -434,6 +464,69 @@ describe("sample batch, fixture sanitization, and regression assertions", () => 
       reportedCount: 2,
       failed: 1,
       missingReportIds: [sampleTwo.id]
+    });
+
+    await rm(temp, { recursive: true, force: true });
+  });
+
+  it("ignores a stale same-id report and writes a current-run failure", async () => {
+    const temp = await mkdtemp(join(tmpdir(), "mp-samples-"));
+    const captureRoot = join(temp, "captures");
+    const reportRoot = join(temp, "reports");
+
+    await writeCapturePayload(captureRoot, {
+      sample,
+      metadata: {
+        runId: "old-run",
+        id: sample.id,
+        url: sample.url,
+        expectedAccount: sample.account,
+        expectedTitle: sample.title,
+        tags: sample.tags,
+        collectedAt: "2026-07-12T00:00:00.000Z",
+        collectorVersion: "0.5.1",
+        browserVersion: "chromium-test"
+      },
+      pageHtml: "",
+      contentHtml: "",
+      article: null,
+      markdown: "",
+      report: report({ runId: "old-run", id: sample.id, status: "passed" })
+    });
+
+    const ensured = await ensureReportsForSelected({
+      selected: [sample],
+      captureRoot,
+      browserVersion: "chromium-test",
+      runId: "current-run",
+      batchResults: [{ sample, ok: false, error: new Error("browser.newContext failed") }]
+    });
+    const { summary, reports } = await generateBatchReport({
+      captureRoot,
+      reportRoot,
+      samples: [sample],
+      manifest: {
+        runId: "current-run",
+        selectedIds: [sample.id],
+        startedAt: "2026-07-13T00:00:00.000Z",
+        finishedAt: "2026-07-13T00:01:00.000Z"
+      },
+      missingReportIds: ensured.missingReportIds
+    });
+
+    expect(reports).toHaveLength(1);
+    expect(reports[0]).toMatchObject({
+      id: sample.id,
+      runId: "current-run",
+      status: "failed",
+      loadStatus: "unknown"
+    });
+    expect(reports[0].errors[0]).toContain("browser.newContext failed");
+    expect(summary).toMatchObject({
+      total: 1,
+      passed: 0,
+      failed: 1,
+      missingReportIds: [sample.id]
     });
 
     await rm(temp, { recursive: true, force: true });

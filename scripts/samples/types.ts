@@ -37,6 +37,7 @@ export type LiveSample = {
 };
 
 export type CaptureMetadata = {
+  runId: string;
   id: string;
   url: string;
   expectedAccount: string;
@@ -48,6 +49,7 @@ export type CaptureMetadata = {
 };
 
 export type ArticleReport = {
+  runId: string;
   id: string;
   url: string;
   status: SampleStatus;

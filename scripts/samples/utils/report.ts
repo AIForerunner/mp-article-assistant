@@ -119,7 +119,7 @@ export async function generateBatchReport(input: {
   const scopedReports =
     scope === "all"
       ? { reports: await readCaptureReports(input.captureRoot), missingIds: [] }
-      : await readCaptureReportsByIds(input.captureRoot, selectedIds);
+      : await readCaptureReportsByIds(input.captureRoot, selectedIds, input.manifest?.runId);
   const missingReportIds = input.missingReportIds || scopedReports.missingIds;
   const summary = summarizeReports(scopedReports.reports, {
     runId: input.manifest?.runId,

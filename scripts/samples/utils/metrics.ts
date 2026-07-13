@@ -298,6 +298,7 @@ export function determineStatus(input: {
 
 export function buildFailureReport(input: {
   sample: LiveSample;
+  runId?: string;
   loadStatus: LoadStatus;
   durationMs: number;
   message: string;
@@ -309,6 +310,7 @@ export function buildFailureReport(input: {
   const warnings = input.loadStatus === "blocked" ? [input.message] : [];
 
   return {
+    runId: input.runId || "",
     id: input.sample.id,
     url: input.sample.url,
     status: determineStatus({
@@ -347,6 +349,7 @@ export function buildFailureReport(input: {
 
 export function buildArticleReport(input: {
   sample: LiveSample;
+  runId?: string;
   article: WeixinArticle;
   contentHtml: string;
   loadStatus: LoadStatus;
@@ -446,6 +449,7 @@ export function buildArticleReport(input: {
   });
 
   return {
+    runId: input.runId || "",
     id: input.sample.id,
     url: input.sample.url,
     status,

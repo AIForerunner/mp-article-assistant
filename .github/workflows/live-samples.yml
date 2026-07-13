@@ -44,10 +44,6 @@ jobs:
           fi
           pnpm samples:collect -- $ARGS
 
-      - name: Regenerate summary
-        if: always()
-        run: pnpm samples:report
-
       - name: Upload live sample artifacts
         if: always()
         uses: actions/upload-artifact@v4

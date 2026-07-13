@@ -28,6 +28,7 @@ type CollectOptions = {
   captureRoot: string;
   timeoutMs: number;
   retries: number;
+  runId: string;
 };
 
 function sleep(ms: number): Promise<void> {
@@ -49,10 +50,12 @@ function categoryForLoadStatus(loadStatus: LoadStatus): Parameters<typeof buildF
 
 function buildMetadata(input: {
   sample: LiveSample;
+  runId: string;
   browserVersion: string;
   collectedAt?: Date;
 }): CaptureMetadata {
   return {
+    runId: input.runId,
     id: input.sample.id,
     url: input.sample.url,
     expectedAccount: input.sample.account,
@@ -76,6 +79,7 @@ async function writeFailedCapture(input: {
     sample: input.sample,
     metadata: buildMetadata({
       sample: input.sample,
+      runId: input.report.runId,
       browserVersion: input.browserVersion
     }),
     pageHtml: input.pageHtml || "",
@@ -113,6 +117,7 @@ async function collectSampleAttempt(input: {
     if (openResult.blocked) {
       const report = buildFailureReport({
         sample: input.sample,
+        runId: input.options.runId,
         loadStatus: "blocked",
         durationMs: Date.now() - startedAt,
         message: "Access appears blocked by login, verification, or environment restrictions.",
@@ -132,6 +137,7 @@ async function collectSampleAttempt(input: {
     if (!selector) {
       const report = buildFailureReport({
         sample: input.sample,
+        runId: input.options.runId,
         loadStatus: "content_not_found",
         durationMs: Date.now() - startedAt,
         message: "Article content node was not found.",
@@ -163,6 +169,7 @@ async function collectSampleAttempt(input: {
 
     const report = buildArticleReport({
       sample: input.sample,
+      runId: input.options.runId,
       article,
       contentHtml,
       loadStatus: "success",
@@ -173,6 +180,7 @@ async function collectSampleAttempt(input: {
       sample: input.sample,
       metadata: buildMetadata({
         sample: input.sample,
+        runId: input.options.runId,
         browserVersion: input.browserVersion
       }),
       pageHtml,
@@ -188,6 +196,7 @@ async function collectSampleAttempt(input: {
     const loadStatus = classifyPageError(error);
     const report = buildFailureReport({
       sample: input.sample,
+      runId: input.options.runId,
       loadStatus,
       durationMs: Date.now() - startedAt,
       message: error instanceof Error ? error.message : String(error),
@@ -276,7 +285,8 @@ async function main(): Promise<void> {
           options: {
             captureRoot: args.captureRoot,
             timeoutMs: args.timeoutMs,
-            retries: args.retries
+            retries: args.retries,
+            runId: runManifest.runId
           }
         }),
       {
@@ -301,6 +311,7 @@ async function main(): Promise<void> {
     selected,
     captureRoot: args.captureRoot,
     browserVersion,
+    runId: completedManifest.runId,
     batchResults
   });
 
