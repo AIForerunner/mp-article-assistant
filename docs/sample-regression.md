@@ -81,8 +81,17 @@ Reports are written to `samples/reports/latest/`:
 - `summary.json`
 - `summary.md`
 - `failures.json`
+- `manifest.json`
 
-Rerun only the previous warning, failed, or blocked samples:
+By default, collection writes a run manifest and the summary only covers the selected samples from that run. For example, `pnpm samples:collect -- --limit 5` reports only those five samples even if older captures exist locally.
+
+To summarize every existing local capture explicitly:
+
+```bash
+pnpm samples:report -- --scope all
+```
+
+Rerun only the previous failed or blocked samples:
 
 ```bash
 pnpm samples:collect:failed

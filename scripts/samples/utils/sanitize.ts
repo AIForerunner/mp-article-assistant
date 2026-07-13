@@ -114,7 +114,7 @@ function replacementTextFor(el: Element | null, index: number): string {
 }
 
 function anonymizeTextNodes(root: Element): void {
-  const walker = root.ownerDocument.createTreeWalker(root, root.ownerDocument.defaultView!.NodeFilter.SHOW_TEXT);
+  const walker = root.ownerDocument.createTreeWalker(root, 4);
   const textNodes: Text[] = [];
   while (walker.nextNode()) {
     const node = walker.currentNode as Text;
@@ -128,11 +128,16 @@ function anonymizeTextNodes(root: Element): void {
   });
 }
 
+function forEachElement(root: Element, callback: (element: Element) => void): void {
+  callback(root);
+  root.querySelectorAll("*").forEach((element) => callback(element));
+}
+
 function scrubAttributes(root: Element): void {
   let imageIndex = 1;
   let linkIndex = 1;
 
-  root.querySelectorAll("*").forEach((element) => {
+  forEachElement(root, (element) => {
     for (const attr of Array.from(element.attributes)) {
       const name = attr.name.toLowerCase();
       if (
@@ -145,13 +150,13 @@ function scrubAttributes(root: Element): void {
       }
     }
 
-    if (element instanceof root.ownerDocument.defaultView!.HTMLAnchorElement) {
+    if (element.tagName.toLowerCase() === "a") {
       const href = element.getAttribute("href") || "";
       element.setAttribute("href", sanitizePublicUrl(href, linkIndex, "link"));
       linkIndex += 1;
     }
 
-    if (element instanceof root.ownerDocument.defaultView!.HTMLImageElement) {
+    if (element.tagName.toLowerCase() === "img") {
       const replacement = sanitizePublicUrl(element.getAttribute("src") || "", imageIndex, "image");
       ["src", "data-src", "data-original", "wximg", "wx-src", "data-url", "longdesc"].forEach((attr) => {
         if (element.hasAttribute(attr)) {
@@ -166,13 +171,50 @@ function scrubAttributes(root: Element): void {
   });
 }
 
-export function sanitizeFixtureHtml(contentHtml: string, fixtureName = "sample-fixture"): string {
-  const dom = new JSDOM(`<div id="fixture-root">${contentHtml}</div>`);
+function extractArticleRoot(contentHtml: string): Element {
+  const dom = new JSDOM("<!doctype html><body></body>");
   const document = dom.window.document;
-  const root = document.querySelector("#fixture-root")!;
+  const template = document.createElement("template");
+  template.innerHTML = contentHtml.trim();
+  const contentRoot =
+    template.content.querySelector("#js_content, #img-content, article") ||
+    (template.content.children.length === 1 ? template.content.firstElementChild : null);
+
+  if (contentRoot) {
+    return contentRoot.cloneNode(true) as Element;
+  }
+
+  const fallbackRoot = document.createElement("div");
+  fallbackRoot.innerHTML = contentHtml;
+  return fallbackRoot;
+}
+
+function standardizeArticleRoot(root: Element): Element {
+  const document = root.ownerDocument;
+  const normalizedRoot = root;
+
+  normalizedRoot.querySelectorAll("#js_content, #img-content").forEach((element) => {
+    element.removeAttribute("id");
+  });
+
+  normalizedRoot.setAttribute("id", "js_content");
+  if (!["div", "section", "article"].includes(normalizedRoot.tagName.toLowerCase())) {
+    const wrapper = document.createElement("div");
+    wrapper.setAttribute("id", "js_content");
+    wrapper.append(...Array.from(normalizedRoot.childNodes));
+    return wrapper;
+  }
+
+  return normalizedRoot;
+}
+
+export function sanitizeFixtureHtml(contentHtml: string, fixtureName = "sample-fixture"): string {
+  const rawRoot = extractArticleRoot(contentHtml);
+  const root = standardizeArticleRoot(rawRoot);
 
   root.querySelectorAll("script, iframe, object, embed, noscript").forEach((node) => node.remove());
   scrubAttributes(root);
+  root.setAttribute("id", "js_content");
   anonymizeTextNodes(root);
 
   return [
@@ -187,7 +229,7 @@ export function sanitizeFixtureHtml(contentHtml: string, fixtureName = "sample-f
     `  <h1 id="activity-name">${fixtureName}</h1>`,
     '  <span id="js_name">测试公众号</span>',
     '  <span id="publish_time">2026-07-12</span>',
-    `  <div id="js_content">${root.innerHTML}</div>`,
+    `  ${root.outerHTML}`,
     "</body>",
     "</html>"
   ].join("\n");

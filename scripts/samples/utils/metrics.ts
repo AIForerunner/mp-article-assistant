@@ -1,13 +1,6 @@
 import { JSDOM } from "jsdom";
 import type { WeixinArticle } from "../../../types";
-import type {
-  ArticleReport,
-  BatchSummary,
-  FailureCategory,
-  LiveSample,
-  LoadStatus,
-  SampleStatus
-} from "../types";
+import type { ArticleReport, BatchSummary, FailureCategory, LiveSample, LoadStatus, SampleStatus } from "../types";
 import {
   isPlaceholderUrl,
   normalizeCoverageText,
@@ -489,9 +482,20 @@ function average(values: number[]): number {
   return roundMetric(values.reduce((sum, value) => sum + value, 0) / values.length);
 }
 
-export function summarizeReports(reports: ArticleReport[]): BatchSummary {
+export function summarizeReports(
+  reports: ArticleReport[],
+  options: {
+    runId?: string;
+    selectedCount?: number;
+    missingReportIds?: string[];
+  } = {}
+): BatchSummary {
   const summary: BatchSummary = {
-    total: reports.length,
+    runId: options.runId,
+    selectedCount: options.selectedCount ?? reports.length,
+    reportedCount: reports.length,
+    missingReportIds: options.missingReportIds || [],
+    total: options.selectedCount ?? reports.length,
     passed: 0,
     warning: 0,
     failed: 0,

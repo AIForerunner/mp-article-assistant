@@ -1,7 +1,7 @@
 import { join } from "node:path";
-import type { ArticleReport, BatchSummary, LiveSample } from "../types";
+import type { ArticleReport, BatchSummary, LiveSample, ReportScope, RunManifest } from "../types";
 import { summarizeReports } from "./metrics";
-import { ensureDir, readCaptureReports, writeJsonFile } from "./storage";
+import { ensureDir, readCaptureReports, readCaptureReportsByIds, writeJsonFile } from "./storage";
 import { writeFile } from "node:fs/promises";
 
 function sampleLabel(sampleById: Map<string, LiveSample>, report: ArticleReport, field: "account" | "title"): string {
@@ -65,6 +65,12 @@ export function renderSummaryMarkdown(input: {
   return [
     "# 公众号文章采集报告",
     "",
+    ...(input.summary.runId ? [`运行 ID：${input.summary.runId}`] : []),
+    `选择样本：${input.summary.selectedCount}`,
+    `已生成报告：${input.summary.reportedCount}`,
+    ...(input.summary.missingReportIds.length
+      ? [`补充失败报告：${input.summary.missingReportIds.join(", ")}`]
+      : []),
     `总样本：${input.summary.total}`,
     `通过：${input.summary.passed}`,
     `警告：${input.summary.warning}`,
@@ -103,11 +109,25 @@ export async function generateBatchReport(input: {
   captureRoot: string;
   reportRoot: string;
   samples: LiveSample[];
+  scope?: ReportScope;
+  manifest?: RunManifest;
+  selectedIds?: string[];
+  missingReportIds?: string[];
 }): Promise<{ summary: BatchSummary; reports: ArticleReport[] }> {
-  const reports = await readCaptureReports(input.captureRoot);
-  const summary = summarizeReports(reports);
-  const failures = reports.filter((report) => ["failed", "blocked"].includes(report.status));
-  const summaryMarkdown = renderSummaryMarkdown({ summary, reports, samples: input.samples });
+  const scope = input.scope || "run";
+  const selectedIds = input.selectedIds || input.manifest?.selectedIds || [];
+  const scopedReports =
+    scope === "all"
+      ? { reports: await readCaptureReports(input.captureRoot), missingIds: [] }
+      : await readCaptureReportsByIds(input.captureRoot, selectedIds);
+  const missingReportIds = input.missingReportIds || scopedReports.missingIds;
+  const summary = summarizeReports(scopedReports.reports, {
+    runId: input.manifest?.runId,
+    selectedCount: scope === "all" ? scopedReports.reports.length : selectedIds.length,
+    missingReportIds
+  });
+  const failures = scopedReports.reports.filter((report) => ["failed", "blocked"].includes(report.status));
+  const summaryMarkdown = renderSummaryMarkdown({ summary, reports: scopedReports.reports, samples: input.samples });
 
   await ensureDir(input.reportRoot);
   await Promise.all([
@@ -116,5 +136,5 @@ export async function generateBatchReport(input: {
     writeFile(join(input.reportRoot, "summary.md"), summaryMarkdown, "utf8")
   ]);
 
-  return { summary, reports };
+  return { summary, reports: scopedReports.reports };
 }

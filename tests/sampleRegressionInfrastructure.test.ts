@@ -1,6 +1,7 @@
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
+import { JSDOM } from "jsdom";
 import { describe, expect, it } from "vitest";
 import { parseSamplesJsonl } from "../scripts/samples/jsonl";
 import type { ArticleReport, LiveSample } from "../scripts/samples/types";
@@ -11,6 +12,8 @@ import {
   buildExpectedAssertions,
   generateFixtureFromCapture
 } from "../scripts/samples/utils/fixture";
+import { generateBatchReport } from "../scripts/samples/utils/report";
+import { ensureReportsForSelected } from "../scripts/samples/utils/run";
 import {
   calculateImageCoverage,
   calculateTextCoverage,
@@ -221,6 +224,27 @@ describe("sample batch, fixture sanitization, and regression assertions", () => 
     expect(sanitized).toContain("https://example.invalid/links/");
   });
 
+  it("standardizes captured outerHTML to a single article root", () => {
+    const sanitized = sanitizeFixtureHtml(
+      '<div id="js_content" class="rich_media_content" style="color: red;"><section><div id="js_content"><p>真实正文</p></div></section></div>',
+      "单根正文"
+    );
+    const dom = new JSDOM(sanitized);
+    const roots = dom.window.document.querySelectorAll("#js_content");
+    const root = roots[0] as HTMLElement;
+
+    expect(roots).toHaveLength(1);
+    expect(root.className).toBe("rich_media_content");
+    expect(root.getAttribute("style")).toContain("color: red");
+    expect(root.querySelector("#js_content")).toBeNull();
+
+    const article = extractArticleFromSnapshot({
+      url: "https://mp.weixin.qq.com/s/sanitized",
+      pageHtml: sanitized
+    });
+    expect(article.contentText).toContain("测试段落");
+  });
+
   it("runs expected.json assertions against an extracted fixture", () => {
     const article = extractArticleFromSnapshot({
       url: "https://mp.weixin.qq.com/s/demo",
@@ -278,9 +302,138 @@ describe("sample batch, fixture sanitization, and regression assertions", () => 
 
     expect(generatedHtml).not.toContain("真实正文");
     expect(generatedHtml).not.toContain("mmbiz.qpic.cn");
+    expect(new JSDOM(generatedHtml).window.document.querySelectorAll("#js_content")).toHaveLength(1);
     expect(JSON.parse(expectedJson)).toMatchObject({
       titleRequired: true,
       accountRequired: true
+    });
+
+    await rm(temp, { recursive: true, force: true });
+  });
+
+  it("writes a fallback report when a worker fails before creating a page", async () => {
+    const temp = await mkdtemp(join(tmpdir(), "mp-samples-"));
+    const captureRoot = join(temp, "captures");
+
+    const result = await ensureReportsForSelected({
+      selected: [sample],
+      captureRoot,
+      browserVersion: "chromium-test",
+      batchResults: [{ sample, ok: false, error: new Error("newPage failed") }]
+    });
+
+    expect(result.missingReportIds).toEqual([sample.id]);
+    expect(result.reports).toHaveLength(1);
+    expect(result.reports[0]).toMatchObject({
+      id: sample.id,
+      status: "failed",
+      loadStatus: "unknown",
+      categories: ["unknown"]
+    });
+    expect(result.reports[0].errors[0]).toContain("newPage failed");
+
+    await rm(temp, { recursive: true, force: true });
+  });
+
+  it("writes a fallback report when a worker fails while writing capture files", async () => {
+    const temp = await mkdtemp(join(tmpdir(), "mp-samples-"));
+    const captureRoot = join(temp, "captures");
+
+    const result = await ensureReportsForSelected({
+      selected: [sample],
+      captureRoot,
+      browserVersion: "chromium-test",
+      batchResults: [{ sample, ok: false, error: new Error("writeCapturePayload failed") }]
+    });
+
+    expect(result.reports[0].errors[0]).toContain("writeCapturePayload failed");
+    expect(result.reports[0].status).toBe("failed");
+
+    await rm(temp, { recursive: true, force: true });
+  });
+
+  it("summarizes only the current run and backfills missing selected reports", async () => {
+    const temp = await mkdtemp(join(tmpdir(), "mp-samples-"));
+    const captureRoot = join(temp, "captures");
+    const reportRoot = join(temp, "reports");
+    const sampleTwo = {
+      ...sample,
+      id: "sample-002",
+      url: "https://mp.weixin.qq.com/s/demo-2",
+      title: "测试文章二"
+    };
+    const oldSample = {
+      ...sample,
+      id: "sample-999",
+      url: "https://mp.weixin.qq.com/s/old",
+      title: "旧样本"
+    };
+
+    await writeCapturePayload(captureRoot, {
+      sample,
+      metadata: {
+        id: sample.id,
+        url: sample.url,
+        expectedAccount: sample.account,
+        expectedTitle: sample.title,
+        tags: sample.tags,
+        collectedAt: "2026-07-12T00:00:00.000Z",
+        collectorVersion: "0.5.1",
+        browserVersion: "chromium-test"
+      },
+      pageHtml: "",
+      contentHtml: "",
+      article: null,
+      markdown: "",
+      report: report({ id: sample.id })
+    });
+    await writeCapturePayload(captureRoot, {
+      sample: oldSample,
+      metadata: {
+        id: oldSample.id,
+        url: oldSample.url,
+        expectedAccount: oldSample.account,
+        expectedTitle: oldSample.title,
+        tags: oldSample.tags,
+        collectedAt: "2026-07-12T00:00:00.000Z",
+        collectorVersion: "0.5.1",
+        browserVersion: "chromium-test"
+      },
+      pageHtml: "",
+      contentHtml: "",
+      article: null,
+      markdown: "",
+      report: report({ id: oldSample.id, status: "failed", errors: ["old failure"], categories: ["unknown"] })
+    });
+
+    const ensured = await ensureReportsForSelected({
+      selected: [sample, sampleTwo],
+      captureRoot,
+      browserVersion: "chromium-test",
+      batchResults: [{ sample: sampleTwo, ok: false, error: new Error("worker failed") }]
+    });
+    const { summary, reports } = await generateBatchReport({
+      captureRoot,
+      reportRoot,
+      samples: [sample, sampleTwo, oldSample],
+      selectedIds: [sample.id, sampleTwo.id],
+      missingReportIds: ensured.missingReportIds,
+      manifest: {
+        runId: "run-test",
+        selectedIds: [sample.id, sampleTwo.id],
+        startedAt: "2026-07-12T00:00:00.000Z",
+        finishedAt: "2026-07-12T00:01:00.000Z"
+      }
+    });
+
+    expect(reports.map((item) => item.id).sort()).toEqual([sample.id, sampleTwo.id]);
+    expect(summary).toMatchObject({
+      runId: "run-test",
+      total: 2,
+      selectedCount: 2,
+      reportedCount: 2,
+      failed: 1,
+      missingReportIds: [sampleTwo.id]
     });
 
     await rm(temp, { recursive: true, force: true });

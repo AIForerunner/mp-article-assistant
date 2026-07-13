@@ -1,7 +1,7 @@
 import { mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
-import type { ArticleReport, CapturePayload, LiveSample } from "../types";
+import type { ArticleReport, CapturePayload, LiveSample, RunManifest } from "../types";
 
 export const DEFAULT_SAMPLES_FILE = "samples/live/articles.jsonl";
 export const DEFAULT_CAPTURE_ROOT = "samples/captures";
@@ -23,6 +23,18 @@ export async function writeJsonFile(path: string, value: unknown): Promise<void>
 
 export async function readJsonFile<T>(path: string): Promise<T> {
   return JSON.parse(await readFile(path, "utf8")) as T;
+}
+
+export async function writeRunManifest(reportRoot: string, manifest: RunManifest): Promise<void> {
+  await writeJsonFile(join(reportRoot, "manifest.json"), manifest);
+}
+
+export async function readRunManifest(reportRoot: string): Promise<RunManifest | undefined> {
+  const manifestPath = join(reportRoot, "manifest.json");
+  if (!existsSync(manifestPath)) {
+    return undefined;
+  }
+  return readJsonFile<RunManifest>(manifestPath);
 }
 
 export async function writeCapturePayload(root: string, payload: CapturePayload): Promise<void> {
@@ -58,6 +70,33 @@ export async function readCaptureReports(root: string): Promise<ArticleReport[]>
   );
 
   return reports.filter((report): report is ArticleReport => Boolean(report));
+}
+
+export async function readCaptureReport(root: string, sampleId: string): Promise<ArticleReport | undefined> {
+  const reportPath = join(captureDirFor(root, sampleId), "report.json");
+  if (!existsSync(reportPath)) {
+    return undefined;
+  }
+  return readJsonFile<ArticleReport>(reportPath);
+}
+
+export async function readCaptureReportsByIds(
+  root: string,
+  sampleIds: string[]
+): Promise<{ reports: ArticleReport[]; missingIds: string[] }> {
+  const reports: ArticleReport[] = [];
+  const missingIds: string[] = [];
+
+  for (const sampleId of sampleIds) {
+    const report = await readCaptureReport(root, sampleId);
+    if (report) {
+      reports.push(report);
+    } else {
+      missingIds.push(sampleId);
+    }
+  }
+
+  return { reports, missingIds };
 }
 
 export async function readFailedSampleIds(reportRoot: string): Promise<Set<string>> {

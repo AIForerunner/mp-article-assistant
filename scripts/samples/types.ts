@@ -88,7 +88,20 @@ export type CapturePayload = {
   report: ArticleReport;
 };
 
+export type ReportScope = "run" | "all";
+
+export type RunManifest = {
+  runId: string;
+  selectedIds: string[];
+  startedAt: string;
+  finishedAt?: string;
+};
+
 export type BatchSummary = {
+  runId?: string;
+  selectedCount: number;
+  reportedCount: number;
+  missingReportIds: string[];
   total: number;
   passed: number;
   warning: number;

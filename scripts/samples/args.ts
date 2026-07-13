@@ -11,6 +11,7 @@ export type ParsedArgs = {
   captureRoot: string;
   reportRoot: string;
   fixtureRoot: string;
+  scope: "run" | "all";
   fixtureName?: string;
 };
 
@@ -32,7 +33,8 @@ export function parseArgs(argv = process.argv.slice(2)): ParsedArgs {
     input: "samples/live/articles.jsonl",
     captureRoot: "samples/captures",
     reportRoot: "samples/reports/latest",
-    fixtureRoot: "samples/fixtures"
+    fixtureRoot: "samples/fixtures",
+    scope: "run"
   };
 
   for (let index = 0; index < argv.length; index += 1) {
@@ -98,6 +100,14 @@ export function parseArgs(argv = process.argv.slice(2)): ParsedArgs {
         if (next) {
           args.fixtureRoot = next;
           index += 1;
+        }
+        break;
+      case "--scope":
+        if (next === "run" || next === "all") {
+          args.scope = next;
+          index += 1;
+        } else {
+          throw new Error("--scope must be either run or all.");
         }
         break;
       case "--name":

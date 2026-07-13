@@ -17,6 +17,12 @@ import {
 } from "./utils/storage";
 import { generateBatchReport } from "./utils/report";
 import { classifyPageError, openArticlePage, screenshotArticle } from "./utils/page";
+import {
+  createRunManifest,
+  ensureReportsForSelected,
+  finishRunManifest,
+  writeLatestRunManifest
+} from "./utils/run";
 
 type CollectOptions = {
   captureRoot: string;
@@ -91,13 +97,15 @@ async function collectSampleAttempt(input: {
   const dir = captureDirFor(input.options.captureRoot, input.sample.id);
   await ensureDir(dir);
 
-  const context = await input.browser.newContext(browserContextOptions());
-  const page = await context.newPage();
+  let context: Awaited<ReturnType<Browser["newContext"]>> | undefined;
+  let page: Awaited<ReturnType<Awaited<ReturnType<Browser["newContext"]>>["newPage"]>> | undefined;
   let pageHtml = "";
   let contentHtml = "";
   let selector: string | undefined;
 
   try {
+    context = await input.browser.newContext(browserContextOptions());
+    page = await context.newPage();
     const openResult = await openArticlePage(page, input.sample.url, input.options.timeoutMs);
     selector = openResult.selector;
     pageHtml = await page.content().catch(() => "");
@@ -176,7 +184,7 @@ async function collectSampleAttempt(input: {
 
     return report;
   } catch (error) {
-    pageHtml = pageHtml || (await page.content().catch(() => ""));
+    pageHtml = pageHtml || (page ? await page.content().catch(() => "") : "");
     const loadStatus = classifyPageError(error);
     const report = buildFailureReport({
       sample: input.sample,
@@ -185,7 +193,9 @@ async function collectSampleAttempt(input: {
       message: error instanceof Error ? error.message : String(error),
       category: categoryForLoadStatus(loadStatus)
     });
-    await screenshotArticle(page, selector, join(dir, "screenshot.png")).catch(() => undefined);
+    if (page) {
+      await screenshotArticle(page, selector, join(dir, "screenshot.png")).catch(() => undefined);
+    }
     return writeFailedCapture({
       sample: input.sample,
       captureRoot: input.options.captureRoot,
@@ -195,7 +205,7 @@ async function collectSampleAttempt(input: {
       report
     });
   } finally {
-    await context.close().catch(() => undefined);
+    await context?.close().catch(() => undefined);
   }
 }
 
@@ -239,22 +249,28 @@ async function main(): Promise<void> {
     return;
   }
 
-  const browser = await launchSampleBrowser({
-    headed: args.headed,
-    timeoutMs: args.timeoutMs
-  });
-  const browserVersion = browser.version();
+  const runManifest = createRunManifest(selected);
+  await writeLatestRunManifest(args.reportRoot, runManifest);
+  let browser: Browser | undefined;
+  let browserVersion = "unavailable";
+  let batchResults: Awaited<ReturnType<typeof runSampleBatch<ArticleReport>>> = [];
 
   try {
+    browser = await launchSampleBrowser({
+      headed: args.headed,
+      timeoutMs: args.timeoutMs
+    });
+    browserVersion = browser.version();
+
     console.log(
       `Collecting ${selected.length} sample(s) with concurrency=${Math.min(args.concurrency, 2)}, retries=${args.retries}.`
     );
 
-    await runSampleBatch(
+    batchResults = await runSampleBatch(
       selected,
       async (sample) =>
         collectSampleWithRetry({
-          browser,
+          browser: browser!,
           sample,
           browserVersion,
           options: {
@@ -268,19 +284,44 @@ async function main(): Promise<void> {
         delayMs: args.delayMs
       }
     );
-
-    const { summary } = await generateBatchReport({
-      captureRoot: args.captureRoot,
-      reportRoot: args.reportRoot,
-      samples
-    });
-
-    console.log(
-      `Done: total=${summary.total}, passed=${summary.passed}, warning=${summary.warning}, failed=${summary.failed}, blocked=${summary.blocked}.`
-    );
+  } catch (error) {
+    console.error(error);
+    batchResults = selected.map((sample) => ({
+      sample,
+      ok: false,
+      error: error as Error
+    }));
   } finally {
-    await browser.close().catch(() => undefined);
+    await browser?.close().catch(() => undefined);
   }
+
+  const completedManifest = finishRunManifest(runManifest);
+  await writeLatestRunManifest(args.reportRoot, completedManifest);
+  const ensured = await ensureReportsForSelected({
+    selected,
+    captureRoot: args.captureRoot,
+    browserVersion,
+    batchResults
+  });
+
+  const { summary } = await generateBatchReport({
+    captureRoot: args.captureRoot,
+    reportRoot: args.reportRoot,
+    samples,
+    scope: "run",
+    manifest: completedManifest,
+    missingReportIds: ensured.missingReportIds
+  });
+
+  if (summary.reportedCount !== selected.length) {
+    throw new Error(
+      `Expected ${selected.length} report(s) for run ${completedManifest.runId}, but found ${summary.reportedCount}.`
+    );
+  }
+
+  console.log(
+    `Done: total=${summary.total}, passed=${summary.passed}, warning=${summary.warning}, failed=${summary.failed}, blocked=${summary.blocked}.`
+  );
 }
 
 main().catch((error) => {
