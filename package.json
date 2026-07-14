@@ -1,7 +1,7 @@
 {
   "name": "mp-article-assistant",
   "displayName": "MP Article Assistant",
-  "version": "0.4.0",
+  "version": "0.5.1",
   "description": "Extract WeChat Official Account articles into local Markdown and JSON",
   "author": "",
   "packageManager": "pnpm@11.7.0",
@@ -10,7 +10,14 @@
     "build": "plasmo build",
     "package": "plasmo package",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "samples:collect": "tsx scripts/samples/collect.ts",
+    "samples:collect:headed": "tsx scripts/samples/collect.ts --headed",
+    "samples:collect:failed": "tsx scripts/samples/collect.ts --failed",
+    "samples:report": "tsx scripts/samples/report.ts",
+    "samples:clean": "tsx scripts/samples/clean.ts",
+    "samples:fixture": "tsx scripts/samples/refresh.ts",
+    "regression": "tsx scripts/samples/regression.ts"
   },
   "dependencies": {
     "plasmo": "^0.90.5",
@@ -19,12 +26,16 @@
     "turndown": "^7.2.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.54.1",
     "@types/chrome": "^0.0.294",
+    "@types/jsdom": "^28.0.3",
     "@types/node": "^22.10.2",
     "@types/react": "^18.3.14",
     "@types/react-dom": "^18.3.5",
     "@types/turndown": "^5.0.5",
     "jsdom": "^25.0.1",
+    "playwright": "^1.54.1",
+    "tsx": "^4.20.3",
     "typescript": "^5.7.2",
     "vitest": "^2.1.8"
   },

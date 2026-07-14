@@ -32,6 +32,9 @@ jobs:
       - name: Run tests
         run: pnpm test
 
+      - name: Run static sample regression
+        run: pnpm regression
+
       - name: Build extension
         run: pnpm build
 

@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <title>样式标题 fixture</title>
+</head>
+<body>
+  <h1 id="activity-name">样式标题 fixture</h1>
+  <span id="js_name">测试公众号</span>
+  <span id="publish_time">2026-07-12</span>
+  <div id="js_content">
+    <section class="rich-section">
+      <span class="visual-heading" style="font-size: 22px; font-weight: 700;">视觉标题但不是语义标题</span>
+      <p>这一段验证当前抽取器不会把纯样式文本误判成 Outline 标题。</p>
+      <p>后续版本可以在独立 PR 中加入非语义标题启发式，然后调整本 fixture 的断言。</p>
+    </section>
+  </div>
+</body>
+</html>

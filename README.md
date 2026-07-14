@@ -46,11 +46,16 @@ Load the generated unpacked extension from Chrome's `chrome://extensions` page. 
 
 ```bash
 pnpm test
+pnpm regression
 pnpm build
 pnpm package
 ```
 
 The fixture tests cover short articles, non-semantic heading noise, image URL normalization, link extraction, and code block extraction.
+
+## Article Sample Regression
+
+Static sanitized article fixtures run with `pnpm regression` on every PR. Real URL collection is available through `pnpm samples:collect` and the manual/scheduled Live Samples workflow; generated captures and reports stay out of Git by default. See [docs/sample-regression.md](docs/sample-regression.md).
 
 ## Workflow Sending
 

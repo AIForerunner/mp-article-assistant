@@ -1,0 +1,17 @@
+{
+  "titleRequired": true,
+  "accountRequired": true,
+  "minTextLength": 70,
+  "minOutlineCount": 1,
+  "expectedCodeBlockCount": 1,
+  "markdownContains": [
+    "## 代码章节",
+    "```typescript",
+    "const answer: number = 42;"
+  ],
+  "markdownNotContains": [
+    "<script",
+    "javascript:",
+    "about:blank"
+  ]
+}

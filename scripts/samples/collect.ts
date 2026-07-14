@@ -1,0 +1,341 @@
+import { join } from "node:path";
+import type { Browser } from "playwright";
+import { parseArgs } from "./args";
+import { readSamplesOrThrow } from "./jsonl";
+import type { ArticleReport, CaptureMetadata, LiveSample, LoadStatus } from "./types";
+import { COLLECTOR_VERSION } from "./types";
+import { browserContextOptions, launchSampleBrowser } from "./utils/browser";
+import { runSampleBatch } from "./utils/batch";
+import { extractArticleFromSnapshot } from "./utils/extract";
+import { buildArticleReport, buildFailureReport } from "./utils/metrics";
+import {
+  captureDirFor,
+  ensureDir,
+  filterSamples,
+  readFailedSampleIds,
+  writeCapturePayload
+} from "./utils/storage";
+import { generateBatchReport } from "./utils/report";
+import { classifyPageError, openArticlePage, screenshotArticle } from "./utils/page";
+import {
+  createRunManifest,
+  ensureReportsForSelected,
+  finishRunManifest,
+  writeLatestRunManifest
+} from "./utils/run";
+
+type CollectOptions = {
+  captureRoot: string;
+  timeoutMs: number;
+  retries: number;
+  runId: string;
+};
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function categoryForLoadStatus(loadStatus: LoadStatus): Parameters<typeof buildFailureReport>[0]["category"] {
+  if (loadStatus === "network_error" || loadStatus === "timeout" || loadStatus === "blocked") {
+    return loadStatus;
+  }
+  if (loadStatus === "content_not_found") {
+    return "content_not_found";
+  }
+  if (loadStatus === "extractor_error") {
+    return "extractor_error";
+  }
+  return "unknown";
+}
+
+function buildMetadata(input: {
+  sample: LiveSample;
+  runId: string;
+  browserVersion: string;
+  collectedAt?: Date;
+}): CaptureMetadata {
+  return {
+    runId: input.runId,
+    id: input.sample.id,
+    url: input.sample.url,
+    expectedAccount: input.sample.account,
+    expectedTitle: input.sample.title,
+    tags: input.sample.tags,
+    collectedAt: (input.collectedAt || new Date()).toISOString(),
+    collectorVersion: COLLECTOR_VERSION,
+    browserVersion: input.browserVersion
+  };
+}
+
+async function writeFailedCapture(input: {
+  sample: LiveSample;
+  captureRoot: string;
+  browserVersion: string;
+  pageHtml?: string;
+  contentHtml?: string;
+  report: ArticleReport;
+}): Promise<ArticleReport> {
+  await writeCapturePayload(input.captureRoot, {
+    sample: input.sample,
+    metadata: buildMetadata({
+      sample: input.sample,
+      runId: input.report.runId,
+      browserVersion: input.browserVersion
+    }),
+    pageHtml: input.pageHtml || "",
+    contentHtml: input.contentHtml || "",
+    article: null,
+    markdown: "",
+    report: input.report
+  });
+  return input.report;
+}
+
+async function collectSampleAttempt(input: {
+  browser: Browser;
+  sample: LiveSample;
+  options: CollectOptions;
+  browserVersion: string;
+}): Promise<ArticleReport> {
+  const startedAt = Date.now();
+  const dir = captureDirFor(input.options.captureRoot, input.sample.id);
+  await ensureDir(dir);
+
+  let context: Awaited<ReturnType<Browser["newContext"]>> | undefined;
+  let page: Awaited<ReturnType<Awaited<ReturnType<Browser["newContext"]>>["newPage"]>> | undefined;
+  let pageHtml = "";
+  let contentHtml = "";
+  let selector: string | undefined;
+
+  try {
+    context = await input.browser.newContext(browserContextOptions());
+    page = await context.newPage();
+    const openResult = await openArticlePage(page, input.sample.url, input.options.timeoutMs);
+    selector = openResult.selector;
+    pageHtml = await page.content().catch(() => "");
+
+    if (openResult.blocked) {
+      const report = buildFailureReport({
+        sample: input.sample,
+        runId: input.options.runId,
+        loadStatus: "blocked",
+        durationMs: Date.now() - startedAt,
+        message: "Access appears blocked by login, verification, or environment restrictions.",
+        category: "blocked"
+      });
+      await screenshotArticle(page, selector, join(dir, "screenshot.png")).catch(() => undefined);
+      return writeFailedCapture({
+        sample: input.sample,
+        captureRoot: input.options.captureRoot,
+        browserVersion: input.browserVersion,
+        pageHtml,
+        contentHtml,
+        report
+      });
+    }
+
+    if (!selector) {
+      const report = buildFailureReport({
+        sample: input.sample,
+        runId: input.options.runId,
+        loadStatus: "content_not_found",
+        durationMs: Date.now() - startedAt,
+        message: "Article content node was not found.",
+        category: "content_not_found"
+      });
+      await screenshotArticle(page, selector, join(dir, "screenshot.png")).catch(() => undefined);
+      return writeFailedCapture({
+        sample: input.sample,
+        captureRoot: input.options.captureRoot,
+        browserVersion: input.browserVersion,
+        pageHtml,
+        contentHtml,
+        report
+      });
+    }
+
+    contentHtml = await page
+      .locator(selector)
+      .first()
+      .evaluate((node) => (node as HTMLElement).outerHTML);
+
+    const article = extractArticleFromSnapshot({
+      url: input.sample.url,
+      pageHtml,
+      selector
+    });
+
+    await screenshotArticle(page, selector, join(dir, "screenshot.png")).catch(() => undefined);
+
+    const report = buildArticleReport({
+      sample: input.sample,
+      runId: input.options.runId,
+      article,
+      contentHtml,
+      loadStatus: "success",
+      durationMs: Date.now() - startedAt
+    });
+
+    await writeCapturePayload(input.options.captureRoot, {
+      sample: input.sample,
+      metadata: buildMetadata({
+        sample: input.sample,
+        runId: input.options.runId,
+        browserVersion: input.browserVersion
+      }),
+      pageHtml,
+      contentHtml,
+      article,
+      markdown: article.markdown || "",
+      report
+    });
+
+    return report;
+  } catch (error) {
+    pageHtml = pageHtml || (page ? await page.content().catch(() => "") : "");
+    const loadStatus = classifyPageError(error);
+    const report = buildFailureReport({
+      sample: input.sample,
+      runId: input.options.runId,
+      loadStatus,
+      durationMs: Date.now() - startedAt,
+      message: error instanceof Error ? error.message : String(error),
+      category: categoryForLoadStatus(loadStatus)
+    });
+    if (page) {
+      await screenshotArticle(page, selector, join(dir, "screenshot.png")).catch(() => undefined);
+    }
+    return writeFailedCapture({
+      sample: input.sample,
+      captureRoot: input.options.captureRoot,
+      browserVersion: input.browserVersion,
+      pageHtml,
+      contentHtml,
+      report
+    });
+  } finally {
+    await context?.close().catch(() => undefined);
+  }
+}
+
+async function collectSampleWithRetry(input: {
+  browser: Browser;
+  sample: LiveSample;
+  options: CollectOptions;
+  browserVersion: string;
+}): Promise<ArticleReport> {
+  let lastReport: ArticleReport | undefined;
+
+  for (let attempt = 0; attempt <= input.options.retries; attempt += 1) {
+    const report = await collectSampleAttempt(input);
+    lastReport = report;
+
+    if (!["network_error", "timeout", "unknown"].includes(report.loadStatus) || report.status === "blocked") {
+      return report;
+    }
+
+    if (attempt < input.options.retries) {
+      await sleep(1000 * (attempt + 1));
+    }
+  }
+
+  return lastReport!;
+}
+
+async function main(): Promise<void> {
+  const args = parseArgs();
+  const samples = await readSamplesOrThrow(args.input);
+  const failedIds = args.failed ? await readFailedSampleIds(args.reportRoot) : undefined;
+  const selected = filterSamples({
+    samples,
+    ids: args.ids,
+    limit: args.limit,
+    failedIds
+  });
+
+  if (selected.length === 0) {
+    console.log("No samples selected.");
+    return;
+  }
+
+  const runManifest = createRunManifest(selected);
+  await writeLatestRunManifest(args.reportRoot, runManifest);
+  let browser: Browser | undefined;
+  let browserVersion = "unavailable";
+  let batchResults: Awaited<ReturnType<typeof runSampleBatch<ArticleReport>>> = [];
+
+  try {
+    browser = await launchSampleBrowser({
+      headed: args.headed,
+      timeoutMs: args.timeoutMs
+    });
+    browserVersion = browser.version();
+
+    console.log(
+      `Collecting ${selected.length} sample(s) with concurrency=${Math.min(args.concurrency, 2)}, retries=${args.retries}.`
+    );
+
+    batchResults = await runSampleBatch(
+      selected,
+      async (sample) =>
+        collectSampleWithRetry({
+          browser: browser!,
+          sample,
+          browserVersion,
+          options: {
+            captureRoot: args.captureRoot,
+            timeoutMs: args.timeoutMs,
+            retries: args.retries,
+            runId: runManifest.runId
+          }
+        }),
+      {
+        concurrency: Math.min(args.concurrency, 2),
+        delayMs: args.delayMs
+      }
+    );
+  } catch (error) {
+    console.error(error);
+    batchResults = selected.map((sample) => ({
+      sample,
+      ok: false,
+      error: error as Error
+    }));
+  } finally {
+    await browser?.close().catch(() => undefined);
+  }
+
+  const completedManifest = finishRunManifest(runManifest);
+  await writeLatestRunManifest(args.reportRoot, completedManifest);
+  const ensured = await ensureReportsForSelected({
+    selected,
+    captureRoot: args.captureRoot,
+    browserVersion,
+    runId: completedManifest.runId,
+    batchResults
+  });
+
+  const { summary } = await generateBatchReport({
+    captureRoot: args.captureRoot,
+    reportRoot: args.reportRoot,
+    samples,
+    scope: "run",
+    manifest: completedManifest,
+    missingReportIds: ensured.missingReportIds
+  });
+
+  if (summary.reportedCount !== selected.length) {
+    throw new Error(
+      `Expected ${selected.length} report(s) for run ${completedManifest.runId}, but found ${summary.reportedCount}.`
+    );
+  }
+
+  console.log(
+    `Done: total=${summary.total}, passed=${summary.passed}, warning=${summary.warning}, failed=${summary.failed}, blocked=${summary.blocked}.`
+  );
+}
+
+main().catch((error) => {
+  console.error(error);
+  process.exitCode = 1;
+});
